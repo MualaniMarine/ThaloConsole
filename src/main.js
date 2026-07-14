@@ -132,7 +132,7 @@ app.innerHTML = `
     </div>
 
     <div class="mid-col">
-      <div class="card">
+      <div class="card lighting-scheme-card">
         <div class="card-head">
           <div class="card-title">照明参数方案</div>
           <div class="card-sub">可直接应用内置方案，也可把当前 24 组照明参数保存为本地方案</div>
@@ -148,7 +148,7 @@ app.innerHTML = `
               <span>本地方案</span>
               <select id="lightingSchemeSelect" class="sun-input"></select>
             </label>
-            <label class="sun-item">
+            <label class="sun-item sun-item-wide">
               <span>方案名称</span>
               <input id="lightingSchemeName" class="sun-input" type="text" placeholder="如 我的SPS黄昏版" />
             </label>
@@ -162,7 +162,7 @@ app.innerHTML = `
         </div>
       </div>
 
-      <div class="card">
+      <div class="card sun-profile-card">
         <div class="card-head">
           <div class="card-title">模拟日出日落</div>
           <div class="card-sub">可直接填写开灯和关灯时间，或按经纬度与时区计算，用于模拟日出日落节奏并保存为常用预设</div>
@@ -212,7 +212,6 @@ app.innerHTML = `
             <button id="btnCalcSunFromCoord">按经纬度计算时间</button>
             <button id="btnApplySun">应用到当前方案</button>
           </div>
-          <div class="muted" id="sunInfo">可直接填写开灯/关灯时间；经纬度支持十进制和度分秒格式；时区填写类似 +08:00 的偏移；预设保存在当前浏览器。</div>
         </div>
       </div>
 
@@ -221,12 +220,12 @@ app.innerHTML = `
     <div class="right-col">
       <div class="card footer-card">
         <div class="card-body footer-body">
-          <div class="footer-line"><strong>Author:</strong> OpenAI ChatGPT · GPT-5.4 Thinking</div>
-          <div class="footer-line"><strong>Creator:</strong> <a href="https://github.com/MualaniMarine/ThaloStudio" target="_blank" rel="noopener noreferrer">https://github.com/MualaniMarine/ThaloStudio</a></div>
+          <div class="footer-line"><strong>Author:</strong> OpenAI ChatGPT · GPT-5.6 Sol</div>
+          <div class="footer-line"><strong>Creator:</strong> <a href="https://github.com/MualaniMarine/ThaloConsole" target="_blank" rel="noopener noreferrer">Thalograph: MualaniMarine</a></div>
+          <div class="footer-line"><strong>Copyright:</strong> © 2026 Thalograph All rights reserved.</div>
           <div class="footer-line"><strong>Official Website:</strong> <a href="https://www.noo-psyche.com/" target="_blank" rel="noopener noreferrer">https://www.noo-psyche.com/</a></div>
-          <div class="footer-line"><strong>Copyright:</strong> © 2026 All rights reserved.</div>
           <div class="footer-line">“Noo-Psyche”及其相关名称、标识、品牌识别元素，为佛山纽斯科技有限公司及其相关权利人所拥有、使用或主张权利的品牌名称、商标、商号或相关商业标识。</div>
-          <div class="footer-line">本项目为便捷使用与兼容性目的制作的非官方可视化编辑工具页面；除非相关权利人另有明确声明，否则不代表官方网站、官方应用或官方背书产品。</div>
+          <div class="footer-line">本项目为便捷使用与兼容性目的制作的非官方可视化控制台；除非相关权利人另有明确声明，否则不代表官方应用或官方背书产品。</div>
         </div>
       </div>
 
@@ -242,7 +241,7 @@ app.innerHTML = `
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="operationCard">
         <div class="card-head">
           <div class="card-title">操作区</div>
           <div class="card-sub">导入、导出、预览开关和快捷操作</div>
@@ -250,15 +249,19 @@ app.innerHTML = `
         <div class="card-body">
           <div class="toolbar-grid">
             <button id="btnRefresh">刷新合成数据</button>
-            <button id="btnImportRaw">从原始串/设备报文导入</button>
-            <label class="file-label toolbar-btn">从二维码图片导入<input id="qrFile" type="file" accept="image/*" /></label>
+            <button id="btnImportRaw">从原始串/报文导入</button>
+            <label class="file-label toolbar-btn">从二维码导入<input id="qrFile" type="file" accept="image/*" /></label>
             <button id="btnCopyRaw">复制原始串</button>
-            <button id="btnSaveQr">保存二维码 PNG</button>
-            <button id="btnToggleQr">显示/隐藏二维码区</button>
+            <button id="btnSaveQr">保存二维码PNG</button>
+            <button id="btnToggleQr">显示/隐藏二维码</button>
             <button id="btnToggleRaw">显示/隐藏原始串</button>
             <button id="btnToggleDevicePanel">显示/隐藏灯具连接</button>
           </div>
-          <div class="status" id="status">已就绪</div>
+          <div class="operation-output" aria-label="操作输出">
+            <div class="operation-output-row"><span>编辑器</span><strong id="status">已就绪</strong></div>
+            <div class="operation-output-row"><span>日出日落</span><strong id="sunInfo">等待日出日落操作…</strong></div>
+            <div class="operation-output-row"><span>灯具</span><strong id="deviceStatus">本地桥接服务检测中…</strong></div>
+          </div>
         </div>
       </div>
 
@@ -281,6 +284,15 @@ app.innerHTML = `
       </div>
 </div>
 `
+
+// 右侧工具列固定顺序：操作区 → 二维码 → 原始串（显示时）→ 版权信息。
+const rightToolsColumn = document.querySelector('.right-col')
+rightToolsColumn.append(
+  document.getElementById('operationCard'),
+  document.getElementById('qrPanel'),
+  document.getElementById('rawCard'),
+  rightToolsColumn.querySelector('.footer-card'),
+)
 
 function clamp(v, lo, hi) {
   const n = Number.parseInt(v, 10)
@@ -997,6 +1009,18 @@ function syncChartCardHeight() {
   chartCard.style.height = `${target}px`
 }
 
+function syncWorkspaceColumnHeights() {
+  const layout = document.getElementById('layout')
+  const editorCard = document.querySelector('.editor-card')
+  if (!layout || !editorCard) return
+  if (window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT) {
+    layout.style.removeProperty('--editor-card-height')
+    return
+  }
+  const height = Math.ceil(editorCard.getBoundingClientRect().height)
+  if (height > 0) layout.style.setProperty('--editor-card-height', `${height}px`)
+}
+
 function renderTrendChart() {
   const canvas = document.getElementById('trendChart')
   if (!canvas) return
@@ -1505,11 +1529,13 @@ renderChartLegend()
 loadDefaultData()
 applyCompactLayoutMode()
 syncChartCardHeight()
+syncWorkspaceColumnHeights()
 const chartWrap = document.querySelector('.chart-wrap')
 if (chartWrap && 'ResizeObserver' in window) {
   const resizeObserver = new ResizeObserver(() => {
     applyCompactLayoutMode()
     syncChartCardHeight()
+    syncWorkspaceColumnHeights()
     renderTrendChart()
   })
   resizeObserver.observe(chartWrap)
@@ -1519,10 +1545,13 @@ if (chartWrap && 'ResizeObserver' in window) {
   if (rightCol) resizeObserver.observe(rightCol)
   const rawCard = document.getElementById('rawCard')
   if (rawCard) resizeObserver.observe(rawCard)
+  const editorCard = document.querySelector('.editor-card')
+  if (editorCard) resizeObserver.observe(editorCard)
 }
 window.addEventListener('resize', () => {
   applyCompactLayoutMode()
   syncChartCardHeight()
+  syncWorkspaceColumnHeights()
   renderTrendChart()
 })
 
@@ -1530,30 +1559,47 @@ window.addEventListener('resize', () => {
 const devicePanel = document.createElement('div')
 devicePanel.className = 'card device-card'
 devicePanel.innerHTML = `
-  <div class="card-head"><div class="card-title">灯具连接与下发</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div>
+  <div class="card-head"><div class="card-title">灯具连接与控制</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div>
   <div class="card-body">
+    <div class="device-connection-summary">
+      <div class="device-summary-item"><span>当前连接设备名称</span><strong id="currentDeviceName">—</strong></div>
+      <div class="device-summary-item device-connection-state"><span>连接状态</span><strong id="currentConnectionState" data-state="idle"><i aria-hidden="true"></i>未连接</strong></div>
+    </div>
     <div class="sun-grid"><label class="sun-item"><span>设备 IP</span><input id="deviceHost" class="sun-input" value="192.168.4.1" inputmode="decimal" /></label><label class="sun-item"><span>扫描网段（可选）</span><input id="deviceSubnet" class="sun-input" placeholder="例如 192.168.1" inputmode="decimal" /></label></div>
-    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnDeviceSync">同步时间</button><button id="btnAutoMode">切换自动模式</button><button id="btnManualMode">切换手动模式</button><button id="btnSendManual">发送当前亮度</button><button id="btnDemoOn">开启演示模式</button><button id="btnDemoOff">关闭演示模式</button></div>
-    <div id="deviceStatus" class="status">本地桥接服务检测中…</div><div id="deviceList" class="muted"></div><div id="devicePagination" class="device-pagination"></div>
+    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnClearDeviceCache" title="清除本机保存的灯具名称缓存">清理缓存设备</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnAutoMode">切换自动模式</button><button id="btnManualMode">切换手动模式</button><button id="btnDemoOn">开启演示模式</button><button id="btnDemoOff">关闭演示模式</button></div>
+    <div class="device-list-head"><i aria-hidden="true"></i><span>可连接灯具 · <strong id="deviceListCount">0 台</strong></span><i aria-hidden="true"></i></div>
+    <div id="deviceList" class="muted"></div><div id="devicePagination" class="device-pagination"></div>
     <div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre>
   </div>`
 const deviceColumn = document.createElement('div')
 deviceColumn.className = 'device-col'
 deviceColumn.append(devicePanel)
-document.querySelector('.layout').append(deviceColumn)
+document.querySelector('.layout').insertBefore(deviceColumn, document.querySelector('.right-col'))
 
 const deviceStatus = document.getElementById('deviceStatus')
 const deviceHost = document.getElementById('deviceHost')
 const deviceSubnet = document.getElementById('deviceSubnet')
+const currentDeviceName = document.getElementById('currentDeviceName')
+const currentConnectionState = document.getElementById('currentConnectionState')
 const deviceList = document.getElementById('deviceList')
+const deviceListCount = document.getElementById('deviceListCount')
 const deviceButtons = new Map()
 const devicePagination = document.getElementById('devicePagination')
 const deviceLog = document.getElementById('deviceLog')
-const DEVICE_PAGE_SIZE = 12
+const DEVICE_PAGE_MAX_ITEMS = 60
+const DEVICE_PAGE_MAX_ROWS = 30
+const DEVICE_NATURAL_LAYOUT_MAX_ROWS = 8
 const MAX_DEVICE_LOGS = 200
+const DEVICE_LOG_HEIGHT = 220
+const DEVICE_LIST_ROW_GAP = 5
+const DEVICE_LIST_ROW_PITCH = 45
 let scannedDevices = []
 let devicePage = 0
 let packetLogs = []
+let connectedHost = ''
+let deviceLayoutFrame = 0
+let deviceIpFitFrame = 0
+let devicePageRowCapacity = null
 const DEVICE_NAME_STORAGE_KEY = 'thalo-console-device-names-v1'
 const deviceNames = (() => {
   try {
@@ -1570,9 +1616,22 @@ const cacheDeviceName = (host, name) => {
   deviceNames[host] = name
   localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
 }
+const currentDeviceCachedName = () => {
+  const host = currentHost()
+  return scannedDevices.find((device) => device.host === host)?.name ?? deviceNames[host] ?? ''
+}
+const updateCurrentDeviceSummary = (state = undefined) => {
+  const host = currentHost()
+  currentDeviceName.textContent = currentDeviceCachedName() || '—'
+  const resolvedState = state ?? (host && host === connectedHost ? 'connected' : 'idle')
+  const labels = { idle: '未连接', connecting: '连接中', connected: '已连接', failed: '连接失败' }
+  currentConnectionState.dataset.state = resolvedState
+  currentConnectionState.lastChild.textContent = labels[resolvedState]
+}
 const updateDeviceButton = (host, name) => {
   if (name) devicePage = 0
   renderDeviceList()
+  updateCurrentDeviceSummary()
 }
 const packetTimestamp = () => {
   const date = new Date()
@@ -1590,21 +1649,95 @@ const api = async (path, payload = undefined) => {
   if (!response.ok) throw new Error(data.error || '本地桥接请求失败')
   return data
 }
-const showDeviceStatus = (value) => { deviceStatus.textContent = value }
+const showDeviceStatus = (value) => {
+  deviceStatus.textContent = value
+}
 const currentHost = () => deviceHost.value.trim()
 const sendDevice = async (command, label) => {
   showDeviceStatus(`${label}：正在连接 ${currentHost()}…`)
   const host = currentHost()
+  updateCurrentDeviceSummary('connecting')
   addPacketLog('→', host, command.toUpperCase())
   try {
     const result = await api('/api/send', { host, command })
+    connectedHost = host
+    updateCurrentDeviceSummary('connected')
     addPacketLog('←', host, result.response || '(无返回数据)')
     showDeviceStatus(`${label}完成${result.response ? `，收到 ${result.response}` : '，设备未返回数据'}`)
     return result
   } catch (error) {
+    if (connectedHost === host) connectedHost = ''
+    updateCurrentDeviceSummary('failed')
     addPacketLog('×', host, error.message)
     throw error
   }
+}
+const deviceRowCount = (devices) => {
+  const hasNamedDevice = devices.some((device) => Boolean(device.name ?? deviceNames[device.host]))
+  return Math.ceil(devices.length / (hasNamedDevice ? 2 : 3))
+}
+const paginateDevices = (devices, maxRows) => {
+  const pages = []
+  let page = []
+  devices.forEach((device) => {
+    const candidate = [...page, device]
+    if (page.length && (candidate.length > DEVICE_PAGE_MAX_ITEMS || deviceRowCount(candidate) > maxRows)) {
+      pages.push(page)
+      page = [device]
+    } else {
+      page = candidate
+    }
+  })
+  if (page.length) pages.push(page)
+  return pages
+}
+const availableDeviceRows = (reservePagination) => {
+  if (window.innerWidth <= 1500) return DEVICE_NATURAL_LAYOUT_MAX_ROWS
+  const body = devicePanel.querySelector(':scope > .card-body')
+  if (!body?.clientHeight) return DEVICE_NATURAL_LAYOUT_MAX_ROWS
+  const outerHeight = (element) => {
+    const style = getComputedStyle(element)
+    return element.offsetHeight + Number.parseFloat(style.marginTop || 0) + Number.parseFloat(style.marginBottom || 0)
+  }
+  const bodyStyle = getComputedStyle(body)
+  const innerHeight = body.clientHeight - Number.parseFloat(bodyStyle.paddingTop || 0) - Number.parseFloat(bodyStyle.paddingBottom || 0)
+  const fixedElements = [
+    body.querySelector('.device-connection-summary'),
+    body.querySelector('.sun-grid'),
+    body.querySelector('.toolbar-grid'),
+    body.querySelector('.device-list-head'),
+    body.querySelector('.device-log-head'),
+  ]
+  const fixedHeight = fixedElements.reduce((total, element) => total + outerHeight(element), 0)
+  const listStyle = getComputedStyle(deviceList)
+  const logStyle = getComputedStyle(deviceLog)
+  const reservedHeight = DEVICE_LOG_HEIGHT
+    + Number.parseFloat(logStyle.marginTop || 0)
+    + Number.parseFloat(logStyle.marginBottom || 0)
+    + Number.parseFloat(listStyle.marginTop || 0)
+    + Number.parseFloat(listStyle.marginBottom || 0)
+    + (reservePagination ? 40 : 0)
+  const availableHeight = innerHeight - fixedHeight - reservedHeight
+  return Math.max(1, Math.min(DEVICE_PAGE_MAX_ROWS, Math.floor((availableHeight + DEVICE_LIST_ROW_GAP) / DEVICE_LIST_ROW_PITCH)))
+}
+const fitUnnamedDeviceIps = () => {
+  cancelAnimationFrame(deviceIpFitFrame)
+  deviceIpFitFrame = requestAnimationFrame(() => {
+    deviceList.querySelectorAll('.unnamed-device .device-ip').forEach((element) => {
+      const fullIp = element.dataset.fullIp
+      element.textContent = fullIp
+      if (element.scrollWidth <= element.clientWidth) return
+      const parts = fullIp.split('.')
+      if (parts.length !== 4) return
+      element.textContent = parts.slice(-2).join('.')
+      if (element.scrollWidth > element.clientWidth) element.textContent = parts.at(-1)
+    })
+  })
+}
+function scheduleDeviceListRender(recalculateCapacity = false) {
+  cancelAnimationFrame(deviceLayoutFrame)
+  if (recalculateCapacity) devicePageRowCapacity = null
+  deviceLayoutFrame = requestAnimationFrame(() => renderDeviceList())
 }
 function renderDeviceList() {
   deviceButtons.clear()
@@ -1613,35 +1746,73 @@ function renderDeviceList() {
     const bNamed = Boolean(b.name ?? deviceNames[b.host])
     return Number(bNamed) - Number(aNamed)
   })
-  const pageCount = Math.max(1, Math.ceil(devices.length / DEVICE_PAGE_SIZE))
+  deviceListCount.textContent = `${devices.length} 台`
+  let reservedDeviceRows = devicePageRowCapacity ?? availableDeviceRows(false)
+  let pages = paginateDevices(devices, reservedDeviceRows)
+  if (devicePageRowCapacity === null && pages.length > 1) {
+    reservedDeviceRows = availableDeviceRows(true)
+    pages = paginateDevices(devices, reservedDeviceRows)
+  }
+  devicePageRowCapacity = reservedDeviceRows
+  const pageCount = Math.max(1, pages.length)
   devicePage = Math.min(devicePage, pageCount - 1)
-  const pageDevices = devices.slice(devicePage * DEVICE_PAGE_SIZE, (devicePage + 1) * DEVICE_PAGE_SIZE)
+  const pageDevices = pages[devicePage] || []
+  const stableDeviceRows = devices.length ? Math.max(...pages.map(deviceRowCount)) : 0
+  deviceList.style.setProperty('--device-list-reserved-height', `${Math.max(0, stableDeviceRows * DEVICE_LIST_ROW_PITCH - DEVICE_LIST_ROW_GAP)}px`)
+  deviceList.classList.toggle('has-named-devices', pageDevices.some((device) => Boolean(device.name ?? deviceNames[device.host])))
   deviceList.replaceChildren(...pageDevices.map((device) => {
     const button = document.createElement('button')
     const name = device.name ?? deviceNames[device.host]
-    button.textContent = deviceLabel(device.host, name)
-    button.classList.toggle('known-device', Boolean(name))
+    const ip = document.createElement('span')
+    ip.className = 'device-ip'
+    ip.dataset.fullIp = device.host
+    ip.textContent = device.host
+    button.title = deviceLabel(device.host, name)
+    if (name) {
+      const deviceName = document.createElement('span')
+      deviceName.className = 'device-name'
+      deviceName.textContent = name
+      button.classList.add('known-device')
+      button.append(ip, deviceName)
+    } else {
+      button.classList.add('unnamed-device')
+      button.append(ip)
+    }
     button.onclick = async () => {
       deviceHost.value = device.host
+      updateCurrentDeviceSummary()
       try { await readDeviceConfiguration() } catch (error) { showDeviceStatus(`读取失败：${error.message}`) }
     }
     deviceButtons.set(device.host, button)
     return button
   }))
+  fitUnnamedDeviceIps()
   devicePagination.replaceChildren()
-  if (devices.length > DEVICE_PAGE_SIZE) {
+  if (pageCount > 1) {
     const previous = document.createElement('button')
     previous.textContent = '上一页'
     previous.disabled = devicePage === 0
     previous.onclick = () => { devicePage--; renderDeviceList() }
     const info = document.createElement('span')
-    info.textContent = `${devicePage + 1} / ${pageCount} 页 · ${devices.length} 台`
+    info.textContent = `${devicePage + 1} / ${pageCount} 页`
     const next = document.createElement('button')
     next.textContent = '下一页'
     next.disabled = devicePage >= pageCount - 1
     next.onclick = () => { devicePage++; renderDeviceList() }
     devicePagination.append(previous, info, next)
   }
+}
+window.addEventListener('resize', () => scheduleDeviceListRender(true))
+if ('ResizeObserver' in window) {
+  let observedDevicePanelHeight = 0
+  const devicePanelResizeObserver = new ResizeObserver(([entry]) => {
+    if (window.innerWidth <= 1500) return
+    const height = Math.round(entry.contentRect.height)
+    if (!height || height === observedDevicePanelHeight) return
+    observedDevicePanelHeight = height
+    scheduleDeviceListRender(true)
+  })
+  devicePanelResizeObserver.observe(devicePanel)
 }
 const allSetPacket = () => {
   const raw = cleanText(document.getElementById('rawBox').value)
@@ -1670,10 +1841,22 @@ document.getElementById('btnDeviceScan').onclick = async () => {
     deviceSubnet.value = result.subnet
     scannedDevices = result.devices
     devicePage = 0
-    renderDeviceList()
     showDeviceStatus(result.devices.length ? `发现 ${result.devices.length} 台可连接灯具` : '未发现 TCP 8266 灯具')
+    renderDeviceList()
   } catch (error) { showDeviceStatus(`扫描失败：${error.message}`) }
 }
+document.getElementById('btnClearDeviceCache').onclick = () => {
+  const cachedCount = Object.keys(deviceNames).length
+  Object.keys(deviceNames).forEach((host) => delete deviceNames[host])
+  localStorage.removeItem(DEVICE_NAME_STORAGE_KEY)
+  scannedDevices = scannedDevices.map((device) => ({ ...device, name: null }))
+  devicePage = 0
+  showDeviceStatus(cachedCount ? `已清理 ${cachedCount} 台灯具的名称缓存` : '当前没有缓存设备')
+  renderDeviceList()
+  updateCurrentDeviceSummary()
+}
+deviceHost.addEventListener('input', () => updateCurrentDeviceSummary())
+updateCurrentDeviceSummary()
 document.getElementById('btnDeviceRead').onclick = async () => {
   try { await readDeviceConfiguration() } catch (error) { showDeviceStatus(`读取失败：${error.message}`) }
 }
