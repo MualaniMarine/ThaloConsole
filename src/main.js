@@ -154,10 +154,8 @@ app.innerHTML = `
             </label>
           </div>
           <div class="toolbar-row sun-actions">
-            <button id="btnSaveLightingScheme">保存当前方案</button>
             <button id="btnDeleteLightingScheme">删除当前方案</button>
-            <button id="btnExportLightingSchemes">导出到本地</button>
-            <label class="file-label toolbar-btn">从本地导入<input id="lightingSchemeFile" type="file" accept="application/json,.json" /></label>
+            <button id="btnSaveLightingScheme">保存当前方案</button>
           </div>
         </div>
       </div>
@@ -183,10 +181,8 @@ app.innerHTML = `
             </label>
           </div>
           <div class="toolbar-row sun-actions">
-            <button id="btnSaveSunProfile">保存预设</button>
             <button id="btnDeleteSunProfile">删除预设</button>
-            <button id="btnExportSunProfiles">导出到本地</button>
-            <label class="file-label toolbar-btn">从本地导入<input id="sunProfileFile" type="file" accept="application/json,.json" /></label>
+            <button id="btnSaveSunProfile">保存预设</button>
           </div>
           <div class="sun-grid">
             <label class="sun-item">
@@ -217,6 +213,12 @@ app.innerHTML = `
 
     </div>
 
+    <div class="log-col hidden" id="deviceLogColumn">
+      <div class="card device-log-floating-card" id="deviceLogFloatingCard">
+        <div class="card-body" id="deviceLogFloatingBody"></div>
+      </div>
+    </div>
+
     <div class="right-col">
       <div class="card footer-card">
         <div class="card-body footer-body">
@@ -224,7 +226,7 @@ app.innerHTML = `
           <div class="footer-line"><strong>Creator:</strong> <a href="https://github.com/MualaniMarine/ThaloConsole" target="_blank" rel="noopener noreferrer">Thalograph: MualaniMarine</a></div>
           <div class="footer-line"><strong>Copyright:</strong> © 2026 Thalograph All rights reserved.</div>
           <div class="footer-line"><strong>Official Website:</strong> <a href="https://www.noo-psyche.com/" target="_blank" rel="noopener noreferrer">https://www.noo-psyche.com/</a></div>
-          <div class="footer-line">“Noo-Psyche”及其相关名称、标识、品牌识别元素，为佛山纽斯科技有限公司及其相关权利人所拥有、使用或主张权利的品牌名称、商标、商号或相关商业标识。</div>
+          <div class="footer-line">“Noo-Psyche”及其相关名称、标识、品牌识别元素，为佛山纽斯科技有限公司及其相关权利人所拥有、使用或主张权利的品牌名称或相关商业标识。</div>
           <div class="footer-line">本项目为便捷使用与兼容性目的制作的非官方可视化控制台；除非相关权利人另有明确声明，否则不代表官方应用或官方背书产品。</div>
         </div>
       </div>
@@ -232,8 +234,16 @@ app.innerHTML = `
       <div class="qr-side" id="qrPanel">
         <div class="card qr-card">
           <div class="card-head">
-            <div class="card-title">二维码预览</div>
-            <div class="card-sub">数据变化后自动刷新，可直接保存 PNG</div>
+            <div class="card-head-row">
+              <div>
+                <div class="card-title">二维码预览</div>
+                <div class="card-sub">数据变化后自动刷新</div>
+              </div>
+              <div class="card-head-actions">
+                <button id="btnSaveQr" class="card-head-button" type="button">保存二维码</button>
+                <button id="btnHideQrCard" class="card-hide-button" type="button">隐藏</button>
+              </div>
+            </div>
           </div>
           <div class="card-body qr-wrap">
             <canvas id="qrCanvas"></canvas>
@@ -248,14 +258,15 @@ app.innerHTML = `
         </div>
         <div class="card-body">
           <div class="toolbar-grid">
-            <button id="btnRefresh">刷新合成数据</button>
+            <button id="btnRefresh" class="hidden">刷新合成数据</button>
             <button id="btnImportRaw">从原始串/报文导入</button>
             <label class="file-label toolbar-btn">从二维码导入<input id="qrFile" type="file" accept="image/*" /></label>
+            <button id="btnExportPresetLibrary">导出配置库</button>
+            <label class="file-label toolbar-btn" id="presetLibraryImportLabel">导入配置库<input id="presetLibraryFile" type="file" accept="application/json,.json" /></label>
             <button id="btnCopyRaw">复制原始串</button>
-            <button id="btnSaveQr">保存二维码PNG</button>
-            <button id="btnToggleQr">显示/隐藏二维码</button>
-            <button id="btnToggleRaw">显示/隐藏原始串</button>
-            <button id="btnToggleDevicePanel">显示/隐藏灯具连接</button>
+            <button id="btnToggleQr" class="hidden">显示二维码</button>
+            <button id="btnToggleRaw">显示原始串</button>
+            <button id="btnToggleDevicePanel" class="hidden">显示灯具连接</button>
           </div>
           <div class="operation-output" aria-label="操作输出">
             <div class="operation-output-row"><span>编辑器</span><strong id="status">已就绪</strong></div>
@@ -267,16 +278,21 @@ app.innerHTML = `
 
       <div class="card hidden" id="rawCard">
         <div class="card-head">
-          <div class="card-title">汇总 / 原始串</div>
-          <div class="card-sub">完整格式：12 位手动亮度头 + # + 24 组 16 位合成数据</div>
+          <div class="card-head-row">
+            <div>
+              <div class="card-title">汇总 / 原始串</div>
+              <div class="card-sub">完整格式：12 位手动亮度头 + # + 24 组 16 位合成数据</div>
+            </div>
+            <button id="btnHideRawCard" class="card-hide-button" type="button">隐藏</button>
+          </div>
         </div>
         <div class="card-body">
-          <textarea id="rawBox" class="raw-box"></textarea>
-          <div class="toolbar-row" style="margin-top:8px">
+          <div class="muted raw-summary" id="lengthInfo"></div>
+          <div class="toolbar-row raw-actions">
             <button id="btnFromTable">从表格刷新原始串</button>
             <button id="btnApplyRaw">从原始串回填表格</button>
           </div>
-          <div class="muted" id="lengthInfo"></div>
+          <textarea id="rawBox" class="raw-box" spellcheck="false"></textarea>
         </div>
       </div>
 
@@ -571,6 +587,176 @@ function composeGroup(vals) {
 }
 function setStatus(msg) { document.getElementById('status').textContent = msg }
 
+let activeConfirmPopover = null
+function closeConfirmPopover() {
+  activeConfirmPopover?.close()
+}
+function openConfirmPopover(anchor, title, message, onConfirm) {
+  closeConfirmPopover()
+  const popover = document.createElement('div')
+  popover.className = 'confirm-popover'
+  popover.setAttribute('role', 'dialog')
+  popover.setAttribute('aria-modal', 'false')
+  popover.innerHTML = `
+    <strong class="confirm-popover-title"></strong>
+    <div class="confirm-popover-message"></div>
+    <div class="confirm-popover-actions">
+      <button type="button" class="confirm-popover-cancel">取消</button>
+      <button type="button" class="confirm-popover-ok">确认删除</button>
+    </div>`
+  popover.querySelector('.confirm-popover-title').textContent = title
+  popover.querySelector('.confirm-popover-message').textContent = message
+  document.body.appendChild(popover)
+
+  const anchorRect = anchor.getBoundingClientRect()
+  const popoverRect = popover.getBoundingClientRect()
+  const left = Math.min(window.innerWidth - popoverRect.width - 10, Math.max(10, anchorRect.right - popoverRect.width))
+  const belowTop = anchorRect.bottom + 10
+  const top = belowTop + popoverRect.height <= window.innerHeight - 10
+    ? belowTop
+    : Math.max(10, anchorRect.top - popoverRect.height - 10)
+  popover.style.left = `${left}px`
+  popover.style.top = `${top}px`
+
+  const close = () => {
+    document.removeEventListener('pointerdown', handleOutside, true)
+    document.removeEventListener('keydown', handleKeydown)
+    window.removeEventListener('resize', close)
+    window.removeEventListener('scroll', close, true)
+    popover.remove()
+    if (activeConfirmPopover?.popover === popover) activeConfirmPopover = null
+  }
+  const handleOutside = (event) => {
+    if (!popover.contains(event.target) && event.target !== anchor) close()
+  }
+  const handleKeydown = (event) => {
+    if (event.key === 'Escape') close()
+  }
+  popover.querySelector('.confirm-popover-cancel').onclick = close
+  popover.querySelector('.confirm-popover-ok').onclick = () => {
+    close()
+    try { onConfirm() } catch (error) { setStatus(error.message) }
+  }
+  document.addEventListener('pointerdown', handleOutside, true)
+  document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', close)
+  window.addEventListener('scroll', close, true)
+  activeConfirmPopover = { popover, close }
+  popover.querySelector('.confirm-popover-cancel').focus()
+}
+
+function suggestImportedPresetName(name, usedNames) {
+  const base = `${name}（导入）`
+  if (!usedNames.has(base)) return base
+  let suffix = 2
+  while (usedNames.has(`${base}${suffix}`)) suffix += 1
+  return `${base}${suffix}`
+}
+
+function resolvePresetImportConflict(anchor, categoryLabel, name, usedNames) {
+  closeConfirmPopover()
+  return new Promise((resolve) => {
+    const popover = document.createElement('div')
+    popover.className = 'confirm-popover import-conflict-popover'
+    popover.setAttribute('role', 'dialog')
+    popover.setAttribute('aria-modal', 'false')
+    popover.innerHTML = `
+      <strong class="confirm-popover-title">发现同名${categoryLabel}</strong>
+      <div class="confirm-popover-message"></div>
+      <label class="import-conflict-label" for="importConflictName">重命名为</label>
+      <input class="import-conflict-input" id="importConflictName" type="text" maxlength="80" />
+      <div class="import-conflict-error" aria-live="polite"></div>
+      <div class="confirm-popover-actions import-conflict-actions">
+        <button type="button" class="import-conflict-overwrite">覆盖</button>
+        <button type="button" class="import-conflict-rename">重命名</button>
+        <button type="button" class="import-conflict-skip">跳过</button>
+      </div>`
+    popover.querySelector('.confirm-popover-message').textContent = `“${name}”已存在，请选择处理方式。`
+    const nameInput = popover.querySelector('.import-conflict-input')
+    const errorBox = popover.querySelector('.import-conflict-error')
+    nameInput.value = suggestImportedPresetName(name, usedNames)
+    document.body.appendChild(popover)
+
+    const anchorRect = anchor.getBoundingClientRect()
+    const popoverRect = popover.getBoundingClientRect()
+    const left = Math.min(window.innerWidth - popoverRect.width - 10, Math.max(10, anchorRect.right - popoverRect.width))
+    const belowTop = anchorRect.bottom + 10
+    const top = belowTop + popoverRect.height <= window.innerHeight - 10
+      ? belowTop
+      : Math.max(10, anchorRect.top - popoverRect.height - 10)
+    popover.style.left = `${left}px`
+    popover.style.top = `${top}px`
+
+    let settled = false
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      document.removeEventListener('keydown', handleKeydown)
+      window.removeEventListener('resize', handleResize)
+      popover.remove()
+      if (activeConfirmPopover?.popover === popover) activeConfirmPopover = null
+      resolve(result)
+    }
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') finish({ action: 'skip' })
+      if (event.key === 'Enter' && event.target === nameInput) rename()
+    }
+    const handleResize = () => finish({ action: 'skip' })
+    const rename = () => {
+      const renamed = cleanText(nameInput.value)
+      if (!renamed) {
+        errorBox.textContent = '新名称不能为空'
+        nameInput.focus()
+        return
+      }
+      if (usedNames.has(renamed)) {
+        errorBox.textContent = '该名称仍然存在，请换一个名称'
+        nameInput.focus()
+        nameInput.select()
+        return
+      }
+      finish({ action: 'rename', name: renamed })
+    }
+    popover.querySelector('.import-conflict-overwrite').onclick = () => finish({ action: 'overwrite' })
+    popover.querySelector('.import-conflict-rename').onclick = rename
+    popover.querySelector('.import-conflict-skip').onclick = () => finish({ action: 'skip' })
+    nameInput.addEventListener('input', () => { errorBox.textContent = '' })
+    document.addEventListener('keydown', handleKeydown)
+    window.addEventListener('resize', handleResize)
+    activeConfirmPopover = { popover, close: () => finish({ action: 'skip' }) }
+    nameInput.focus()
+    nameInput.select()
+  })
+}
+
+async function mergeImportedPresets(imported, existing, categoryLabel, anchor) {
+  const merged = [...existing]
+  const stats = { added: 0, overwritten: 0, renamed: 0, skipped: 0 }
+
+  for (const item of imported) {
+    const existingIndex = merged.findIndex((saved) => saved.name === item.name)
+    if (existingIndex < 0) {
+      merged.unshift(item)
+      stats.added += 1
+      continue
+    }
+
+    const usedNames = new Set(merged.map((saved) => saved.name))
+    const choice = await resolvePresetImportConflict(anchor, categoryLabel, item.name, usedNames)
+    if (choice.action === 'overwrite') {
+      merged[existingIndex] = item
+      stats.overwritten += 1
+    } else if (choice.action === 'rename') {
+      merged.unshift({ ...item, name: choice.name })
+      stats.renamed += 1
+    } else {
+      stats.skipped += 1
+    }
+  }
+
+  return { list: merged.slice(0, 50), stats }
+}
+
 function composeManualHeader() {
   return LIGHT_FIELDS.map((field) => decimalToHexByte(state.headerInputs[field]?.value || 0)).join('')
 }
@@ -759,35 +945,17 @@ function loadSelectedSunProfile() {
   fillSunFormFromProfile(profiles[index])
   setStatus(`已载入预设：${profiles[index].name}`)
 }
-function deleteSelectedSunProfile() {
-  const index = Number.parseInt(document.getElementById('sunProfileSelect').value, 10)
+function deleteSelectedSunProfile(expectedName = null) {
   const profiles = getSunProfiles()
+  const index = expectedName === null
+    ? Number.parseInt(document.getElementById('sunProfileSelect').value, 10)
+    : profiles.findIndex((profile) => profile.name === expectedName)
   if (!Number.isInteger(index) || index < 0 || index >= profiles.length) throw new Error('请先选择预设')
   const [removed] = profiles.splice(index, 1)
   setSunProfiles(profiles)
   renderSunProfileOptions()
   document.getElementById('sunProfileName').value = ''
   setStatus(`已删除预设：${removed.name}`)
-}
-function exportSunProfiles() {
-  downloadJsonFile('sun-profiles.json', {
-    type: 'np-web-sun-profiles',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    profiles: getSunProfiles(),
-  })
-  setStatus('已导出日出日落预设到本地')
-}
-async function importSunProfiles(file) {
-  const payload = await readJsonFile(file)
-  const imported = normalizeImportedSunProfiles(payload)
-  const merged = [...imported, ...getSunProfiles()].filter((item, index, arr) => (
-    arr.findIndex((other) => other.name === item.name) === index
-  ))
-  setSunProfiles(merged.slice(0, 50))
-  renderSunProfileOptions()
-  document.getElementById('sunProfileFile').value = ''
-  setStatus(`已导入 ${imported.length} 个日出日落预设`)
 }
 function saveCurrentLightingScheme() {
   const name = cleanText(document.getElementById('lightingSchemeName').value)
@@ -806,9 +974,11 @@ function loadSelectedLightingScheme() {
   document.getElementById('lightingSchemeName').value = schemes[index].name
   applyLightingSchemeData(schemes[index], schemes[index].name)
 }
-function deleteSelectedLightingScheme() {
-  const index = Number.parseInt(document.getElementById('lightingSchemeSelect').value, 10)
+function deleteSelectedLightingScheme(expectedName = null) {
   const schemes = getLightingSchemes()
+  const index = expectedName === null
+    ? Number.parseInt(document.getElementById('lightingSchemeSelect').value, 10)
+    : schemes.findIndex((scheme) => scheme.name === expectedName)
   if (!Number.isInteger(index) || index < 0 || index >= schemes.length) throw new Error('请先选择本地方案')
   const [removed] = schemes.splice(index, 1)
   setLightingSchemes(schemes)
@@ -816,25 +986,50 @@ function deleteSelectedLightingScheme() {
   document.getElementById('lightingSchemeName').value = ''
   setStatus(`已删除照明参数方案：${removed.name}`)
 }
-function exportLightingSchemes() {
-  downloadJsonFile('lighting-schemes.json', {
-    type: 'np-web-lighting-schemes',
+function exportPresetLibrary() {
+  const schemes = getLightingSchemes()
+  const profiles = getSunProfiles()
+  downloadJsonFile('thalo-preset-library.json', {
+    type: 'thalo-console-preset-library',
     version: 1,
     exportedAt: new Date().toISOString(),
-    schemes: getLightingSchemes(),
+    schemes,
+    profiles,
   })
-  setStatus('已导出照明参数方案到本地')
+  setStatus(`已导出配置库：${schemes.length} 个照明方案，${profiles.length} 个日出日落预设`)
 }
-async function importLightingSchemes(file) {
+async function importPresetLibrary(file, anchor) {
   const payload = await readJsonFile(file)
-  const imported = normalizeImportedLightingSchemes(payload)
-  const merged = [...imported, ...getLightingSchemes()].filter((item, index, arr) => (
-    arr.findIndex((other) => other.name === item.name) === index
-  ))
-  setLightingSchemes(merged.slice(0, 50))
+  if (!payload || !Array.isArray(payload.schemes) || !Array.isArray(payload.profiles)) {
+    throw new Error('配置库文件格式无效，文件中必须同时包含照明参数方案和日出日落预设')
+  }
+  const importedSchemes = normalizeImportedLightingSchemes(payload)
+  const importedProfiles = normalizeImportedSunProfiles(payload)
+  const schemeResult = await mergeImportedPresets(
+    importedSchemes,
+    getLightingSchemes(),
+    '照明参数方案',
+    anchor,
+  )
+  const profileResult = await mergeImportedPresets(
+    importedProfiles,
+    getSunProfiles(),
+    '日出日落预设',
+    anchor,
+  )
+  setLightingSchemes(schemeResult.list)
+  setSunProfiles(profileResult.list)
   renderLightingSchemeOptions()
-  document.getElementById('lightingSchemeFile').value = ''
-  setStatus(`已导入 ${imported.length} 个照明参数方案`)
+  renderSunProfileOptions()
+  const allStats = [schemeResult.stats, profileResult.stats].reduce((total, item) => ({
+    added: total.added + item.added,
+    overwritten: total.overwritten + item.overwritten,
+    renamed: total.renamed + item.renamed,
+    skipped: total.skipped + item.skipped,
+  }), { added: 0, overwritten: 0, renamed: 0, skipped: 0 })
+  setStatus(
+    `配置库导入完成：新增 ${allStats.added}，覆盖 ${allStats.overwritten}，重命名 ${allStats.renamed}，跳过 ${allStats.skipped}`,
+  )
 }
 
 function getRowTotalMinutes(row, index) {
@@ -1275,8 +1470,17 @@ function updateRawText() {
   const raw = `${state.manualHeader}#${groups.join('')}`
   document.getElementById('rawBox').value = raw
   const payloadLen = raw.includes('#') ? raw.split('#')[1].length : 0
-  document.getElementById('lengthInfo').textContent = `头部长度: ${state.manualHeader.length} | 总长度: ${raw.length} | 照明参数长度: ${payloadLen} | 分组数: ${Math.floor(payloadLen / 16)}`
+  document.getElementById('lengthInfo').textContent = `手动参数: ${state.manualHeader.length} | 总长度: ${raw.length} | 照明参数: ${payloadLen} | 分组数: ${Math.floor(payloadLen / 16)}`
+  resizeRawBoxToContent()
+  if (document.getElementById('currentTotalBrightness')) updateDeviceRuntimeSummary()
   scheduleQrRefresh()
+}
+
+function resizeRawBoxToContent() {
+  const box = document.getElementById('rawBox')
+  if (!box || box.offsetParent === null) return
+  box.style.height = 'auto'
+  box.style.height = `${box.scrollHeight}px`
 }
 
 let qrJob = null
@@ -1353,17 +1557,37 @@ async function importQrImage(file) {
   setStatus('已从二维码图片导入')
 }
 
-function toggleQrPanel() {
-  state.qrVisible = !state.qrVisible
+function syncPanelVisibilityButtons() {
+  document.getElementById('btnToggleQr')?.classList.toggle('hidden', state.qrVisible)
+  document.getElementById('btnToggleRaw')?.classList.toggle('hidden', state.rawVisible)
+  const deviceHidden = document.querySelector('.device-col')?.classList.contains('hidden') || false
+  document.getElementById('btnToggleDevicePanel')?.classList.toggle('hidden', !deviceHidden)
+}
+
+function toggleQrPanel(visible = !state.qrVisible) {
+  state.qrVisible = visible
   document.getElementById('qrPanel').classList.toggle('hidden', !state.qrVisible)
+  syncPanelVisibilityButtons()
   if (state.qrVisible) generateQr()
   setStatus(state.qrVisible ? '已显示二维码区' : '已隐藏二维码区')
 }
 
-function toggleRawPanel() {
-  state.rawVisible = !state.rawVisible
+function toggleRawPanel(visible = !state.rawVisible) {
+  state.rawVisible = visible
   document.getElementById('rawCard').classList.toggle('hidden', !state.rawVisible)
+  syncPanelVisibilityButtons()
+  if (state.rawVisible) requestAnimationFrame(resizeRawBoxToContent)
   setStatus(state.rawVisible ? '已显示原始串区' : '已隐藏原始串区')
+}
+
+function setDevicePanelVisible(visible) {
+  const panelColumn = document.querySelector('.device-col')
+  if (!panelColumn) return
+  panelColumn.classList.toggle('hidden', !visible)
+  document.getElementById('layout').classList.toggle('device-column-hidden', !visible)
+  syncPanelVisibilityButtons()
+  syncDeviceLogPlacement(scannedDevices)
+  setStatus(visible ? '已显示灯具连接与下发' : '已隐藏灯具连接与下发')
 }
 
 function copyRaw() {
@@ -1421,27 +1645,22 @@ function wireActions() {
       setStatus(e.message)
     }
   }
-  document.getElementById('btnExportLightingSchemes').onclick = () => {
-    try {
-      exportLightingSchemes()
-    } catch (e) {
-      setStatus(e.message)
-    }
-  }
   document.getElementById('btnDeleteLightingScheme').onclick = () => {
     try {
-      deleteSelectedLightingScheme()
+      const select = document.getElementById('lightingSchemeSelect')
+      const index = Number.parseInt(select.value, 10)
+      const scheme = getLightingSchemes()[index]
+      if (!scheme) throw new Error('请先选择本地方案')
+      openConfirmPopover(
+        document.getElementById('btnDeleteLightingScheme'),
+        '确认删除当前方案？',
+        `“${scheme.name}”删除后无法恢复。`,
+        () => deleteSelectedLightingScheme(scheme.name),
+      )
     } catch (e) {
       setStatus(e.message)
     }
   }
-  document.getElementById('lightingSchemeFile').addEventListener('change', async (e) => {
-    try {
-      await importLightingSchemes(e.target.files[0])
-    } catch (err) {
-      setStatus(`导入失败：${err.message}`)
-    }
-  })
   document.getElementById('btnImportRaw').onclick = () => {
     const raw = prompt('请粘贴完整原始串或设备报文：', cleanText(document.getElementById('rawBox').value) || `${state.manualHeader}#`)
     if (raw != null) {
@@ -1450,14 +1669,11 @@ function wireActions() {
     }
   }
   document.getElementById('qrFile').addEventListener('change', (e) => importQrImage(e.target.files[0]))
-  document.getElementById('btnToggleQr').onclick = toggleQrPanel
-  document.getElementById('btnToggleRaw').onclick = toggleRawPanel
-  document.getElementById('btnToggleDevicePanel').onclick = () => {
-    deviceColumn.classList.toggle('hidden')
-    const hidden = deviceColumn.classList.contains('hidden')
-    document.getElementById('layout').classList.toggle('device-column-hidden', hidden)
-    setStatus(hidden ? '已隐藏灯具连接与下发' : '已显示灯具连接与下发')
-  }
+  document.getElementById('btnToggleQr').onclick = () => toggleQrPanel(true)
+  document.getElementById('btnToggleRaw').onclick = () => toggleRawPanel(true)
+  document.getElementById('btnToggleDevicePanel').onclick = () => setDevicePanelVisible(true)
+  document.getElementById('btnHideQrCard').onclick = () => toggleQrPanel(false)
+  document.getElementById('btnHideRawCard').onclick = () => toggleRawPanel(false)
   const toggleLeftPanel = (showChart) => {
     state.compactChartVisible = showChart
     applyLeftPanelMode()
@@ -1474,6 +1690,24 @@ function wireActions() {
   document.getElementById('btnRefresh').onclick = refreshAll
   document.getElementById('btnSaveQr').onclick = saveQr
   document.getElementById('btnCopyRaw').onclick = copyRaw
+  document.getElementById('btnExportPresetLibrary').onclick = () => {
+    try {
+      exportPresetLibrary()
+    } catch (e) {
+      setStatus(e.message)
+    }
+  }
+  document.getElementById('presetLibraryFile').addEventListener('change', async (event) => {
+    const input = event.currentTarget
+    try {
+      await importPresetLibrary(input.files[0], document.getElementById('presetLibraryImportLabel'))
+    } catch (error) {
+      closeConfirmPopover()
+      setStatus(`导入失败：${error.message}`)
+    } finally {
+      input.value = ''
+    }
+  })
   document.getElementById('btnFromTable').onclick = refreshAll
   document.getElementById('btnApplyRaw').onclick = applyRawToTable
   document.getElementById('btnCalcSunFromCoord').onclick = () => {
@@ -1497,29 +1731,30 @@ function wireActions() {
       setStatus(e.message)
     }
   }
-  document.getElementById('btnExportSunProfiles').onclick = () => {
-    try {
-      exportSunProfiles()
-    } catch (e) {
-      setStatus(e.message)
-    }
-  }
   document.getElementById('btnDeleteSunProfile').onclick = () => {
     try {
-      deleteSelectedSunProfile()
+      const select = document.getElementById('sunProfileSelect')
+      const index = Number.parseInt(select.value, 10)
+      const profile = getSunProfiles()[index]
+      if (!profile) throw new Error('请先选择预设')
+      openConfirmPopover(
+        document.getElementById('btnDeleteSunProfile'),
+        '确认删除预设？',
+        `“${profile.name}”删除后无法恢复。`,
+        () => deleteSelectedSunProfile(profile.name),
+      )
     } catch (e) {
       setStatus(e.message)
     }
   }
-  document.getElementById('sunProfileFile').addEventListener('change', async (e) => {
-    try {
-      await importSunProfiles(e.target.files[0])
-    } catch (err) {
-      setStatus(`导入失败：${err.message}`)
-    }
+  document.getElementById('rawBox').addEventListener('input', () => {
+    resizeRawBoxToContent()
+    scheduleQrRefresh()
   })
-  document.getElementById('rawBox').addEventListener('input', scheduleQrRefresh)
-  window.addEventListener('resize', scheduleQrRefresh)
+  window.addEventListener('resize', () => {
+    resizeRawBoxToContent()
+    scheduleQrRefresh()
+  })
 }
 
 buildRows()
@@ -1559,38 +1794,57 @@ window.addEventListener('resize', () => {
 const devicePanel = document.createElement('div')
 devicePanel.className = 'card device-card'
 devicePanel.innerHTML = `
-  <div class="card-head"><div class="card-title">灯具连接与控制</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div>
+  <div class="card-head"><div class="card-head-row"><div><div class="card-title">灯具连接与控制</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div><button id="btnHideDeviceCard" class="card-hide-button" type="button">隐藏</button></div></div>
   <div class="card-body">
     <div class="device-connection-summary">
       <div class="device-summary-item"><span>当前连接设备名称</span><strong id="currentDeviceName">—</strong></div>
       <div class="device-summary-item device-connection-state"><span>连接状态</span><strong id="currentConnectionState" data-state="idle"><i aria-hidden="true"></i>未连接</strong></div>
+      <div class="device-summary-item"><span>运行模式</span><strong id="currentDeviceMode" class="device-mode-value" data-mode="unknown">未获取</strong></div>
+      <div class="device-summary-item"><span>当前总亮度</span><strong id="currentTotalBrightness" class="device-brightness-value">—</strong></div>
     </div>
     <div class="sun-grid"><label class="sun-item"><span>设备 IP</span><input id="deviceHost" class="sun-input" value="192.168.4.1" inputmode="decimal" /></label><label class="sun-item"><span>扫描网段（可选）</span><input id="deviceSubnet" class="sun-input" placeholder="例如 192.168.1" inputmode="decimal" /></label></div>
-    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnClearDeviceCache" title="清除本机保存的灯具名称缓存">清理缓存设备</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnAutoMode">切换自动模式</button><button id="btnManualMode">切换手动模式</button><button id="btnDemoOn">开启演示模式</button><button id="btnDemoOff">关闭演示模式</button></div>
+    <div class="device-group-controls">
+      <label class="sun-item"><span>分组筛选</span><select id="deviceGroupFilter" class="sun-input"></select></label>
+      <div class="device-group-assignment">
+        <label class="sun-item"><span>当前设备分组</span><select id="currentDeviceGroup" class="sun-input"></select></label>
+        <button id="btnAddDeviceGroup" type="button">新建分组</button>
+      </div>
+    </div>
+    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnClearDeviceCache" title="清除本机保存的灯具名称缓存">清理缓存设备</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnModeToggle">切换手动模式</button><button id="btnDemoToggle">开启演示模式</button></div>
     <div class="device-list-head"><i aria-hidden="true"></i><span>可连接灯具 · <strong id="deviceListCount">0 台</strong></span><i aria-hidden="true"></i></div>
     <div id="deviceList" class="muted"></div><div id="devicePagination" class="device-pagination"></div>
-    <div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre>
+    <div id="deviceLogHome"><div id="deviceLogSection" class="device-log-section"><div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre></div></div>
   </div>`
 const deviceColumn = document.createElement('div')
 deviceColumn.className = 'device-col'
 deviceColumn.append(devicePanel)
-document.querySelector('.layout').insertBefore(deviceColumn, document.querySelector('.right-col'))
+document.querySelector('.layout').insertBefore(deviceColumn, document.getElementById('deviceLogColumn'))
+document.getElementById('btnHideDeviceCard').onclick = () => setDevicePanelVisible(false)
+syncPanelVisibilityButtons()
 
 const deviceStatus = document.getElementById('deviceStatus')
 const deviceHost = document.getElementById('deviceHost')
 const deviceSubnet = document.getElementById('deviceSubnet')
 const currentDeviceName = document.getElementById('currentDeviceName')
 const currentConnectionState = document.getElementById('currentConnectionState')
+const currentDeviceMode = document.getElementById('currentDeviceMode')
+const currentTotalBrightness = document.getElementById('currentTotalBrightness')
+const deviceGroupFilter = document.getElementById('deviceGroupFilter')
+const currentDeviceGroup = document.getElementById('currentDeviceGroup')
 const deviceList = document.getElementById('deviceList')
 const deviceListCount = document.getElementById('deviceListCount')
 const deviceButtons = new Map()
 const devicePagination = document.getElementById('devicePagination')
 const deviceLog = document.getElementById('deviceLog')
+const deviceLogHome = document.getElementById('deviceLogHome')
+const deviceLogSection = document.getElementById('deviceLogSection')
+const deviceLogColumn = document.getElementById('deviceLogColumn')
+const deviceLogFloatingBody = document.getElementById('deviceLogFloatingBody')
 const DEVICE_PAGE_MAX_ITEMS = 60
 const DEVICE_PAGE_MAX_ROWS = 30
 const DEVICE_NATURAL_LAYOUT_MAX_ROWS = 8
 const MAX_DEVICE_LOGS = 200
-const DEVICE_LOG_HEIGHT = 220
+const DEVICE_EMBEDDED_LOG_MIN_HEIGHT = 200
 const DEVICE_LIST_ROW_GAP = 5
 const DEVICE_LIST_ROW_PITCH = 45
 let scannedDevices = []
@@ -1599,26 +1853,318 @@ let packetLogs = []
 let connectedHost = ''
 let deviceLayoutFrame = 0
 let deviceIpFitFrame = 0
+let deviceLogFitFrame = 0
 let devicePageRowCapacity = null
+let deviceLogForcedBySpace = false
+const deviceRuntimeStates = new Map()
+const deviceConnectionFailures = new Map()
 const DEVICE_NAME_STORAGE_KEY = 'thalo-console-device-names-v1'
+const DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-by-name-v2'
+const LEGACY_DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-v1'
 const deviceNames = (() => {
   try {
     const saved = JSON.parse(localStorage.getItem(DEVICE_NAME_STORAGE_KEY) || '{}')
     return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
   } catch { return {} }
 })()
+const deviceGroups = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_GROUP_STORAGE_KEY) || '{}')
+    const groups = saved && typeof saved === 'object' && !Array.isArray(saved)
+      ? Object.fromEntries(Object.entries(saved).filter(([name, group]) => cleanText(name) && cleanText(group)))
+      : {}
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_DEVICE_GROUP_STORAGE_KEY) || '{}')
+    if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+      Object.entries(legacy).forEach(([host, group]) => {
+        const name = cleanText(deviceNames[host])
+        const normalizedGroup = cleanText(group)
+        if (!name || !normalizedGroup) return
+        if (!groups[name]) groups[name] = normalizedGroup
+        delete legacy[host]
+      })
+      if (Object.keys(legacy).length) localStorage.setItem(LEGACY_DEVICE_GROUP_STORAGE_KEY, JSON.stringify(legacy))
+      else localStorage.removeItem(LEGACY_DEVICE_GROUP_STORAGE_KEY)
+    }
+    localStorage.setItem(DEVICE_GROUP_STORAGE_KEY, JSON.stringify(groups))
+    return groups
+  } catch { return {} }
+})()
+const savedDeviceGroupNames = () => [...new Set(Object.values(deviceGroups).map(cleanText).filter(Boolean))]
+  .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+const saveDeviceGroups = () => {
+  localStorage.setItem(DEVICE_GROUP_STORAGE_KEY, JSON.stringify(deviceGroups))
+}
+const deviceNameForHost = (host, name = null) => cleanText(name ?? scannedDevices.find((device) => device.host === host)?.name ?? deviceNames[host] ?? '')
+const deviceGroupForHost = (host, name = null) => {
+  const resolvedName = deviceNameForHost(host, name)
+  return resolvedName ? deviceGroups[resolvedName] || '' : ''
+}
+const refreshDeviceGroupOptions = () => {
+  const groups = savedDeviceGroupNames()
+  const selectedFilter = deviceGroupFilter.value || 'all'
+  const filterOptions = [
+    new Option('全部设备', 'all'),
+    new Option('未分组', 'ungrouped'),
+    ...groups.map((group) => new Option(group, `group:${group}`)),
+  ]
+  deviceGroupFilter.replaceChildren(...filterOptions)
+  deviceGroupFilter.value = filterOptions.some((option) => option.value === selectedFilter) ? selectedFilter : 'all'
+
+  const currentName = deviceNameForHost(currentHost())
+  const assignedGroup = currentName ? deviceGroups[currentName] || '' : ''
+  currentDeviceGroup.replaceChildren(
+    new Option(currentName ? '未分组' : '请先读取设备名称', ''),
+    ...groups.map((group) => new Option(group, group)),
+  )
+  currentDeviceGroup.value = assignedGroup
+  currentDeviceGroup.disabled = !currentName
+  const addButton = document.getElementById('btnAddDeviceGroup')
+  addButton.disabled = !currentName
+  addButton.title = currentName ? `为“${currentName}”新建分组` : '请先读取设备配置以获取名称'
+}
+const assignCurrentDeviceGroup = (groupName) => {
+  const host = currentHost()
+  if (!host) throw new Error('请先选择或填写设备 IP')
+  const name = deviceNameForHost(host)
+  if (!name) throw new Error('请先读取设备配置，获取设备名称后再分组')
+  const group = cleanText(groupName)
+  if (group) deviceGroups[name] = group
+  else delete deviceGroups[name]
+  saveDeviceGroups()
+  refreshDeviceGroupOptions()
+  devicePage = 0
+  devicePageRowCapacity = null
+  renderDeviceList()
+  showDeviceStatus(group ? `已将“${name}”分到“${group}”` : `已将“${name}”设为未分组`)
+}
+const openDeviceGroupCreator = (anchor) => {
+  closeConfirmPopover()
+  const popover = document.createElement('div')
+  popover.className = 'confirm-popover device-group-popover'
+  popover.setAttribute('role', 'dialog')
+  popover.innerHTML = `
+    <strong class="confirm-popover-title">新建并分配设备分组</strong>
+    <div class="confirm-popover-message">新分组将按设备名称保存，并直接分配给当前设备。</div>
+    <input class="device-group-name-input" type="text" maxlength="30" placeholder="例如 客厅、主缸、补光灯" />
+    <div class="device-group-name-error" aria-live="polite"></div>
+    <div class="confirm-popover-actions">
+      <button type="button" class="device-group-cancel">取消</button>
+      <button type="button" class="device-group-save">新建并分配</button>
+    </div>`
+  document.body.appendChild(popover)
+
+  const input = popover.querySelector('.device-group-name-input')
+  const errorBox = popover.querySelector('.device-group-name-error')
+  const anchorRect = anchor.getBoundingClientRect()
+  const popoverRect = popover.getBoundingClientRect()
+  popover.style.left = `${Math.min(window.innerWidth - popoverRect.width - 10, Math.max(10, anchorRect.right - popoverRect.width))}px`
+  const belowTop = anchorRect.bottom + 10
+  popover.style.top = `${belowTop + popoverRect.height <= window.innerHeight - 10 ? belowTop : Math.max(10, anchorRect.top - popoverRect.height - 10)}px`
+
+  const close = () => {
+    document.removeEventListener('pointerdown', handleOutside, true)
+    document.removeEventListener('keydown', handleKeydown)
+    window.removeEventListener('resize', close)
+    window.removeEventListener('scroll', close, true)
+    popover.remove()
+    if (activeConfirmPopover?.popover === popover) activeConfirmPopover = null
+  }
+  const save = () => {
+    const group = cleanText(input.value)
+    if (!group) {
+      errorBox.textContent = '分组名称不能为空'
+      input.focus()
+      return
+    }
+    try {
+      assignCurrentDeviceGroup(group)
+      close()
+    } catch (error) {
+      errorBox.textContent = error.message
+      input.focus()
+    }
+  }
+  const handleOutside = (event) => {
+    if (!popover.contains(event.target) && event.target !== anchor) close()
+  }
+  const handleKeydown = (event) => {
+    if (event.key === 'Escape') close()
+    if (event.key === 'Enter' && event.target === input) save()
+  }
+  popover.querySelector('.device-group-cancel').onclick = close
+  popover.querySelector('.device-group-save').onclick = save
+  input.addEventListener('input', () => { errorBox.textContent = '' })
+  document.addEventListener('pointerdown', handleOutside, true)
+  document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('resize', close)
+  window.addEventListener('scroll', close, true)
+  activeConfirmPopover = { popover, close }
+  input.focus()
+}
 const deviceLabel = (host, name) => {
   const resolvedName = name ?? deviceNames[host]
-  return resolvedName ? `${host} · ${resolvedName}` : host
+  const group = resolvedName ? deviceGroups[resolvedName] : ''
+  return [host, resolvedName, group ? `分组：${group}` : ''].filter(Boolean).join(' · ')
 }
 const cacheDeviceName = (host, name) => {
   if (!name || deviceNames[host] === name) return
+  const previousName = cleanText(deviceNames[host])
+  let groupChanged = false
+  try {
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_DEVICE_GROUP_STORAGE_KEY) || '{}')
+    const legacyGroup = cleanText(legacy?.[host])
+    if (legacyGroup && !deviceGroups[name]) {
+      deviceGroups[name] = legacyGroup
+      groupChanged = true
+    }
+    if (legacy && typeof legacy === 'object' && !Array.isArray(legacy) && Object.hasOwn(legacy, host)) {
+      delete legacy[host]
+      if (Object.keys(legacy).length) localStorage.setItem(LEGACY_DEVICE_GROUP_STORAGE_KEY, JSON.stringify(legacy))
+      else localStorage.removeItem(LEGACY_DEVICE_GROUP_STORAGE_KEY)
+    }
+  } catch { /* 旧版分组损坏时不影响设备名称缓存 */ }
+  if (previousName && deviceGroups[previousName] && !deviceGroups[name]) {
+    deviceGroups[name] = deviceGroups[previousName]
+    const previousNameStillUsed = Object.entries(deviceNames)
+      .some(([savedHost, savedName]) => savedHost !== host && savedName === previousName)
+    if (!previousNameStillUsed) delete deviceGroups[previousName]
+    groupChanged = true
+  }
+  if (groupChanged) saveDeviceGroups()
   deviceNames[host] = name
   localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
+}
+const recordDeviceConnectionFailure = (host) => {
+  const failureCount = (deviceConnectionFailures.get(host) || 0) + 1
+  if (failureCount < 2) {
+    deviceConnectionFailures.set(host, failureCount)
+    return ''
+  }
+
+  deviceConnectionFailures.delete(host)
+  const removedName = cleanText(deviceNames[host])
+  if (!removedName) return ''
+  delete deviceNames[host]
+  if (Object.keys(deviceNames).length) localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
+  else localStorage.removeItem(DEVICE_NAME_STORAGE_KEY)
+  scannedDevices = scannedDevices.map((device) => (
+    device.host === host ? { ...device, name: null } : device
+  ))
+  return removedName
 }
 const currentDeviceCachedName = () => {
   const host = currentHost()
   return scannedDevices.find((device) => device.host === host)?.name ?? deviceNames[host] ?? ''
+}
+const runtimeStateForHost = (host = currentHost()) => {
+  if (!deviceRuntimeStates.has(host)) {
+    deviceRuntimeStates.set(host, { mode: 'unknown', demoStartedAt: null })
+  }
+  return deviceRuntimeStates.get(host)
+}
+const curveBrightnessAtMinute = (minute) => {
+  if (!state.rows.length) return null
+  const points = state.rows.map((row, index) => ({
+    minute: index * 60 + clamp(row.minuteInput?.value ?? row.values['分钟'], 0, 59),
+    values: LIGHT_FIELDS.map((field) => Number(row.values[field] || 0)),
+  }))
+  const target = ((minute % 1440) + 1440) % 1440
+  let previous
+  let next
+  const nextIndex = points.findIndex((point) => point.minute >= target)
+  if (nextIndex === 0) {
+    previous = { ...points.at(-1), minute: points.at(-1).minute - 1440 }
+    next = points[0]
+  } else if (nextIndex < 0) {
+    previous = points.at(-1)
+    next = { ...points[0], minute: points[0].minute + 1440 }
+  } else {
+    previous = points[nextIndex - 1]
+    next = points[nextIndex]
+  }
+  const span = Math.max(1, next.minute - previous.minute)
+  const ratio = Math.max(0, Math.min(1, (target - previous.minute) / span))
+  return previous.values.map((value, index) => value + (next.values[index] - value) * ratio)
+}
+const formatRuntimeMinute = (minute) => {
+  const normalized = Math.floor(((minute % 1440) + 1440) % 1440)
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`
+}
+const syncDeviceModeButtons = () => {
+  const runtime = runtimeStateForHost()
+  const modeButton = document.getElementById('btnModeToggle')
+  const demoButton = document.getElementById('btnDemoToggle')
+  if (!modeButton || !demoButton) return
+
+  const demoActive = runtime.mode === 'demo'
+  const targetMode = runtime.mode === 'manual' ? 'automatic' : 'manual'
+  modeButton.dataset.targetMode = targetMode
+  modeButton.textContent = targetMode === 'automatic' ? '切换自动模式' : '切换手动模式'
+  modeButton.disabled = demoActive
+  modeButton.title = demoActive ? '请先关闭演示模式' : ''
+
+  demoButton.dataset.demoAction = demoActive ? 'stop' : 'start'
+  demoButton.textContent = demoActive ? '关闭演示模式' : '开启演示模式'
+}
+function updateDeviceRuntimeSummary() {
+  if (!currentDeviceMode || !currentTotalBrightness) return
+  const runtime = runtimeStateForHost()
+  const modeLabels = { unknown: '未获取', automatic: '自动模式', manual: '手动模式', demo: '演示模式' }
+  if (runtime.mode === 'demo' && Date.now() - (runtime.demoStartedAt || Date.now()) >= 240000) {
+    runtime.mode = 'automatic'
+    runtime.demoStartedAt = null
+  }
+  const demoMinute = runtime.mode === 'demo'
+    ? Math.min(1439.999, ((Date.now() - (runtime.demoStartedAt || Date.now())) / 240000) * 1440)
+    : null
+  currentDeviceMode.dataset.mode = runtime.mode
+  currentDeviceMode.textContent = runtime.mode === 'demo'
+    ? `演示模式（${formatRuntimeMinute(demoMinute)}）`
+    : (modeLabels[runtime.mode] || '未获取')
+  syncDeviceModeButtons()
+  if (runtime.mode === 'unknown') {
+    currentTotalBrightness.textContent = '—'
+    currentTotalBrightness.removeAttribute('title')
+    return
+  }
+
+  let values
+  let calculationLabel
+  if (runtime.mode === 'manual') {
+    values = LIGHT_FIELDS.map((field) => clamp(state.headerInputs[field]?.value ?? 0, 0, 100))
+    calculationLabel = '手动模式六通道'
+  } else {
+    const now = new Date()
+    const curveMinute = runtime.mode === 'demo'
+      ? demoMinute
+      : now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+    values = curveBrightnessAtMinute(curveMinute)
+    calculationLabel = `${runtime.mode === 'demo' ? '演示曲线' : '自动曲线'} ${formatRuntimeMinute(curveMinute)}`
+  }
+  if (!values?.length) {
+    currentTotalBrightness.textContent = '—'
+    return
+  }
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length
+  const rounded = Math.round(average * 10) / 10
+  currentTotalBrightness.textContent = `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`
+  currentTotalBrightness.title = `${calculationLabel}：${LIGHT_FIELDS.map((field, index) => `${field} ${Math.round(values[index] * 10) / 10}%`).join('、')}`
+}
+const setDeviceMode = (host, mode) => {
+  const runtime = runtimeStateForHost(host)
+  if (mode === 'demo') {
+    runtime.demoStartedAt = Date.now()
+  } else {
+    runtime.demoStartedAt = null
+  }
+  runtime.mode = mode
+  updateDeviceRuntimeSummary()
+}
+const stopDeviceDemoMode = (host) => {
+  const runtime = runtimeStateForHost(host)
+  runtime.mode = 'automatic'
+  runtime.demoStartedAt = null
+  updateDeviceRuntimeSummary()
 }
 const updateCurrentDeviceSummary = (state = undefined) => {
   const host = currentHost()
@@ -1627,6 +2173,8 @@ const updateCurrentDeviceSummary = (state = undefined) => {
   const labels = { idle: '未连接', connecting: '连接中', connected: '已连接', failed: '连接失败' }
   currentConnectionState.dataset.state = resolvedState
   currentConnectionState.lastChild.textContent = labels[resolvedState]
+  refreshDeviceGroupOptions()
+  updateDeviceRuntimeSummary()
 }
 const updateDeviceButton = (host, name) => {
   if (name) devicePage = 0
@@ -1660,14 +2208,22 @@ const sendDevice = async (command, label) => {
   addPacketLog('→', host, command.toUpperCase())
   try {
     const result = await api('/api/send', { host, command })
+    if (!cleanText(result.response)) {
+      addPacketLog('←', host, '(无返回数据)')
+      throw new Error('设备未返回数据，不能判定为已连接')
+    }
+    deviceConnectionFailures.delete(host)
     connectedHost = host
     updateCurrentDeviceSummary('connected')
-    addPacketLog('←', host, result.response || '(无返回数据)')
-    showDeviceStatus(`${label}完成${result.response ? `，收到 ${result.response}` : '，设备未返回数据'}`)
+    addPacketLog('←', host, result.response)
+    showDeviceStatus(`${label}完成，收到 ${result.response}`)
     return result
   } catch (error) {
+    const removedName = recordDeviceConnectionFailure(host)
+    if (removedName) error = new Error(`${error.message}；连续连接失败 2 次，已移除名称缓存“${removedName}”`)
     if (connectedHost === host) connectedHost = ''
     updateCurrentDeviceSummary('failed')
+    if (removedName) renderDeviceList()
     addPacketLog('×', host, error.message)
     throw error
   }
@@ -1701,24 +2257,48 @@ const availableDeviceRows = (reservePagination) => {
   }
   const bodyStyle = getComputedStyle(body)
   const innerHeight = body.clientHeight - Number.parseFloat(bodyStyle.paddingTop || 0) - Number.parseFloat(bodyStyle.paddingBottom || 0)
+  const logIsInDeviceCard = deviceLogHome.contains(deviceLogSection)
   const fixedElements = [
     body.querySelector('.device-connection-summary'),
     body.querySelector('.sun-grid'),
+    body.querySelector('.device-group-controls'),
     body.querySelector('.toolbar-grid'),
     body.querySelector('.device-list-head'),
-    body.querySelector('.device-log-head'),
-  ]
+    logIsInDeviceCard ? body.querySelector('.device-log-head') : null,
+  ].filter(Boolean)
   const fixedHeight = fixedElements.reduce((total, element) => total + outerHeight(element), 0)
   const listStyle = getComputedStyle(deviceList)
   const logStyle = getComputedStyle(deviceLog)
-  const reservedHeight = DEVICE_LOG_HEIGHT
-    + Number.parseFloat(logStyle.marginTop || 0)
-    + Number.parseFloat(logStyle.marginBottom || 0)
+  const reservedHeight = (logIsInDeviceCard
+    ? DEVICE_EMBEDDED_LOG_MIN_HEIGHT + Number.parseFloat(logStyle.marginTop || 0) + Number.parseFloat(logStyle.marginBottom || 0)
+    : 0)
     + Number.parseFloat(listStyle.marginTop || 0)
     + Number.parseFloat(listStyle.marginBottom || 0)
     + (reservePagination ? 40 : 0)
   const availableHeight = innerHeight - fixedHeight - reservedHeight
   return Math.max(1, Math.min(DEVICE_PAGE_MAX_ROWS, Math.floor((availableHeight + DEVICE_LIST_ROW_GAP) / DEVICE_LIST_ROW_PITCH)))
+}
+const syncDeviceLogPlacement = (devices) => {
+  const hasCachedDevice = devices.some((device) => Boolean(device.name ?? deviceNames[device.host]))
+  const shouldFloat = deviceLogForcedBySpace || devices.length > (hasCachedDevice ? 16 : 24)
+  const isFloating = deviceLogFloatingBody.contains(deviceLogSection)
+  if (shouldFloat !== isFloating) {
+    (shouldFloat ? deviceLogFloatingBody : deviceLogHome).appendChild(deviceLogSection)
+    devicePageRowCapacity = null
+  }
+  const showLogColumn = shouldFloat && !deviceColumn.classList.contains('hidden')
+  deviceLogColumn.classList.toggle('hidden', !showLogColumn)
+  document.getElementById('layout').classList.toggle('device-log-column-visible', showLogColumn)
+}
+const checkEmbeddedDeviceLogHeight = (devices) => {
+  cancelAnimationFrame(deviceLogFitFrame)
+  deviceLogFitFrame = requestAnimationFrame(() => {
+    if (window.innerWidth <= 1500 || !deviceLogHome.contains(deviceLogSection)) return
+    if (deviceLog.clientHeight >= DEVICE_EMBEDDED_LOG_MIN_HEIGHT) return
+    deviceLogForcedBySpace = true
+    devicePageRowCapacity = null
+    renderDeviceList()
+  })
 }
 const fitUnnamedDeviceIps = () => {
   cancelAnimationFrame(deviceIpFitFrame)
@@ -1736,17 +2316,28 @@ const fitUnnamedDeviceIps = () => {
 }
 function scheduleDeviceListRender(recalculateCapacity = false) {
   cancelAnimationFrame(deviceLayoutFrame)
-  if (recalculateCapacity) devicePageRowCapacity = null
+  if (recalculateCapacity) {
+    devicePageRowCapacity = null
+    deviceLogForcedBySpace = false
+  }
   deviceLayoutFrame = requestAnimationFrame(() => renderDeviceList())
 }
 function renderDeviceList() {
   deviceButtons.clear()
-  const devices = [...scannedDevices].sort((a, b) => {
+  const allDevices = [...scannedDevices].sort((a, b) => {
     const aNamed = Boolean(a.name ?? deviceNames[a.host])
     const bNamed = Boolean(b.name ?? deviceNames[b.host])
     return Number(bNamed) - Number(aNamed)
   })
-  deviceListCount.textContent = `${devices.length} 台`
+  syncDeviceLogPlacement(allDevices)
+  const filter = deviceGroupFilter.value || 'all'
+  const devices = allDevices.filter((device) => {
+    const group = deviceGroupForHost(device.host, device.name)
+    if (filter === 'ungrouped') return !group
+    if (filter.startsWith('group:')) return group === filter.slice(6)
+    return true
+  })
+  deviceListCount.textContent = filter === 'all' ? `${devices.length} 台` : `${devices.length} / ${allDevices.length} 台`
   let reservedDeviceRows = devicePageRowCapacity ?? availableDeviceRows(false)
   let pages = paginateDevices(devices, reservedDeviceRows)
   if (devicePageRowCapacity === null && pages.length > 1) {
@@ -1763,6 +2354,7 @@ function renderDeviceList() {
   deviceList.replaceChildren(...pageDevices.map((device) => {
     const button = document.createElement('button')
     const name = device.name ?? deviceNames[device.host]
+    const group = deviceGroupForHost(device.host, name)
     const ip = document.createElement('span')
     ip.className = 'device-ip'
     ip.dataset.fullIp = device.host
@@ -1771,12 +2363,18 @@ function renderDeviceList() {
     if (name) {
       const deviceName = document.createElement('span')
       deviceName.className = 'device-name'
-      deviceName.textContent = name
+      deviceName.textContent = group ? `${name} · ${group}` : name
       button.classList.add('known-device')
       button.append(ip, deviceName)
     } else {
       button.classList.add('unnamed-device')
       button.append(ip)
+      if (group) {
+        const groupName = document.createElement('span')
+        groupName.className = 'device-name device-group-name'
+        groupName.textContent = group
+        button.append(groupName)
+      }
     }
     button.onclick = async () => {
       deviceHost.value = device.host
@@ -1801,6 +2399,7 @@ function renderDeviceList() {
     next.onclick = () => { devicePage++; renderDeviceList() }
     devicePagination.append(previous, info, next)
   }
+  checkEmbeddedDeviceLogHeight(allDevices)
 }
 window.addEventListener('resize', () => scheduleDeviceListRender(true))
 if ('ResizeObserver' in window) {
@@ -1828,10 +2427,12 @@ const readDeviceConfiguration = async () => {
   document.getElementById('rawBox').value = result.response
   applyRawToTable()
   const name = readDeviceName(result.response)
+  const mode = readDeviceMode(result.response)
   if (name) {
     cacheDeviceName(host, name)
     updateDeviceButton(host, name)
   }
+  if (mode) setDeviceMode(host, mode)
   showDeviceStatus(`已读取并导入灯具配置${name ? `：${name}` : ''}`)
 }
 document.getElementById('btnDeviceScan').onclick = async () => {
@@ -1841,6 +2442,7 @@ document.getElementById('btnDeviceScan').onclick = async () => {
     deviceSubnet.value = result.subnet
     scannedDevices = result.devices
     devicePage = 0
+    deviceLogForcedBySpace = false
     showDeviceStatus(result.devices.length ? `发现 ${result.devices.length} 台可连接灯具` : '未发现 TCP 8266 灯具')
     renderDeviceList()
   } catch (error) { showDeviceStatus(`扫描失败：${error.message}`) }
@@ -1851,11 +2453,27 @@ document.getElementById('btnClearDeviceCache').onclick = () => {
   localStorage.removeItem(DEVICE_NAME_STORAGE_KEY)
   scannedDevices = scannedDevices.map((device) => ({ ...device, name: null }))
   devicePage = 0
+  deviceLogForcedBySpace = false
   showDeviceStatus(cachedCount ? `已清理 ${cachedCount} 台灯具的名称缓存` : '当前没有缓存设备')
   renderDeviceList()
   updateCurrentDeviceSummary()
 }
 deviceHost.addEventListener('input', () => updateCurrentDeviceSummary())
+deviceGroupFilter.addEventListener('change', () => {
+  devicePage = 0
+  devicePageRowCapacity = null
+  renderDeviceList()
+})
+currentDeviceGroup.addEventListener('change', () => {
+  try { assignCurrentDeviceGroup(currentDeviceGroup.value) } catch (error) { showDeviceStatus(error.message) }
+})
+document.getElementById('btnAddDeviceGroup').onclick = () => {
+  if (!deviceNameForHost(currentHost())) {
+    showDeviceStatus('请先读取设备配置，获取设备名称后再分组')
+    return
+  }
+  openDeviceGroupCreator(document.getElementById('btnAddDeviceGroup'))
+}
 updateCurrentDeviceSummary()
 document.getElementById('btnDeviceRead').onclick = async () => {
   try { await readDeviceConfiguration() } catch (error) { showDeviceStatus(`读取失败：${error.message}`) }
@@ -1870,20 +2488,26 @@ document.getElementById('btnDeviceSync').onclick = async () => {
     await sendDevice(`AAA51003${values}BB`, '同步时间')
   } catch (error) { showDeviceStatus(`同步失败：${error.message}`) }
 }
-document.getElementById('btnAutoMode').onclick = async () => {
-  try { await sendDevice('AAA5100401BB', '切换自动模式') } catch (error) { showDeviceStatus(`切换自动模式失败：${error.message}`) }
-}
-document.getElementById('btnManualMode').onclick = async () => {
-  try { await sendDevice('AAA5100400BB', '切换手动模式') } catch (error) { showDeviceStatus(`切换手动模式失败：${error.message}`) }
+document.getElementById('btnModeToggle').onclick = async () => {
+  const host = currentHost()
+  const targetMode = runtimeStateForHost(host).mode === 'manual' ? 'automatic' : 'manual'
+  const automatic = targetMode === 'automatic'
+  try {
+    await sendDevice(automatic ? 'AAA5100401BB' : 'AAA5100400BB', automatic ? '切换自动模式' : '切换手动模式')
+    setDeviceMode(host, targetMode)
+  } catch (error) { showDeviceStatus(`${automatic ? '切换自动模式' : '切换手动模式'}失败：${error.message}`) }
 }
 document.getElementById('btnSendManual').onclick = async () => {
   try { refreshManualHeader(); await sendDevice(`AAA51005${state.manualHeader}BB`, '发送当前亮度') } catch (error) { showDeviceStatus(`发送当前亮度失败：${error.message}`) }
 }
-document.getElementById('btnDemoOn').onclick = async () => {
-  try { await sendDevice('AAA5100A00BB', '开启演示模式') } catch (error) { showDeviceStatus(`开启演示模式失败：${error.message}`) }
-}
-document.getElementById('btnDemoOff').onclick = async () => {
-  try { await sendDevice('AAA5100A01BB', '关闭演示模式') } catch (error) { showDeviceStatus(`关闭演示模式失败：${error.message}`) }
+document.getElementById('btnDemoToggle').onclick = async () => {
+  const host = currentHost()
+  const stopping = runtimeStateForHost(host).mode === 'demo'
+  try {
+    await sendDevice(stopping ? 'AAA5100A01BB' : 'AAA5100A00BB', stopping ? '关闭演示模式' : '开启演示模式')
+    if (stopping) stopDeviceDemoMode(host)
+    else setDeviceMode(host, 'demo')
+  } catch (error) { showDeviceStatus(`${stopping ? '关闭演示模式' : '开启演示模式'}失败：${error.message}`) }
 }
 document.getElementById('btnExportDeviceLog').onclick = () => {
   const blob = new Blob([packetLogs.join('\n') || '等待设备通信…'], { type: 'text/plain;charset=utf-8' })
@@ -1902,6 +2526,7 @@ api('/api/health').then((info) => {
   if (info.subnet) deviceSubnet.value = info.subnet
   showDeviceStatus(`本地桥接已就绪；默认扫描 ${info.subnet || '手动指定网段'}.0/24`)
 }).catch(() => showDeviceStatus('未检测到本地桥接。请使用 npm run console 启动。'))
+setInterval(updateDeviceRuntimeSummary, 1000)
 
 function readDeviceName(packet) {
   try {
@@ -1910,5 +2535,17 @@ function readDeviceName(packet) {
     const bytes = hex.slice(408, 430).match(/.{2}/g).map((part) => Number.parseInt(part, 16))
     const name = new TextDecoder().decode(new Uint8Array(bytes)).replace(/[\0\s]/g, '')
     return name || null
+  } catch { return null }
+}
+function readDeviceMode(packet) {
+  try {
+    const hex = resolveDevicePacketHex(normalizeHexStream(packet))
+    const { groupCount } = parseDevicePacketBody(hex)
+    const modeOffset = 22 + groupCount * 16
+    if (hex.length < modeOffset + 2) return null
+    const flag = hex.slice(modeOffset, modeOffset + 2)
+    if (flag === '01') return 'automatic'
+    if (flag === '00') return 'manual'
+    return null
   } catch { return null }
 }

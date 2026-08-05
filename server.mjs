@@ -78,6 +78,7 @@ function exchange(host, hex, timeout = 1400) {
     const socket = net.createConnection({ host, port: DEVICE_PORT })
     const chunks = []
     let settled = false
+    let connected = false
     const finish = (error) => {
       if (settled) return
       settled = true
@@ -85,10 +86,18 @@ function exchange(host, hex, timeout = 1400) {
       if (error) reject(error)
       else resolve(Buffer.concat(chunks).toString('hex').toUpperCase())
     }
-    socket.setTimeout(timeout, () => finish())
+    const finishAfterResponse = () => {
+      if (chunks.length) finish()
+      else finish(new Error(connected ? '设备已建立 TCP 连接，但未返回数据' : '连接设备超时'))
+    }
+    socket.setTimeout(timeout, finishAfterResponse)
     socket.once('error', finish)
-    socket.once('connect', () => socket.write(Buffer.from(hex, 'hex')))
+    socket.once('connect', () => {
+      connected = true
+      socket.write(Buffer.from(hex, 'hex'))
+    })
     socket.on('data', (chunk) => chunks.push(chunk))
+    socket.once('end', finishAfterResponse)
   })
 }
 
