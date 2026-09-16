@@ -211,6 +211,17 @@ app.innerHTML = `
         </div>
       </div>
 
+      <div class="card cluster-control-entry-card">
+        <div class="card-head">
+          <div class="card-title">集群控制</div>
+          <div class="card-sub">向全部已命名设备或指定分组群发当前配置</div>
+        </div>
+        <div class="card-body cluster-control-entry-body">
+          <div class="cluster-entry-summary" id="clusterEntrySummary">等待设备名称缓存…</div>
+          <button id="btnOpenClusterControl" type="button">打开集群控制</button>
+        </div>
+      </div>
+
     </div>
 
     <div class="log-col hidden" id="deviceLogColumn">
@@ -346,6 +357,13 @@ rightToolsToggle.onclick = () => {
   const layout = document.getElementById('layout')
   setRightToolsDrawer(!layout.classList.contains('right-tools-drawer-open'))
 }
+document.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return
+  const layout = document.getElementById('layout')
+  if (!layout.classList.contains('right-tools-drawer-open')) return
+  if (rightToolsColumn.contains(event.target) || rightToolsToggle.contains(event.target)) return
+  setRightToolsDrawer(false)
+})
 document.addEventListener('keydown', (event) => {
   const layout = document.getElementById('layout')
   if (event.key === 'Escape' && layout.classList.contains('right-tools-drawer-open')) setRightToolsDrawer(false)
@@ -578,26 +596,39 @@ function parseDevicePacketBody(clean) {
   }
 }
 function resolveDevicePacketHex(clean) {
-  // A5A1 也可能就是配置包的功能头；能直接解析时绝不移动起点。
-  try {
-    parseDevicePacketBody(clean)
-    return clean
-  } catch (firstError) {
-    if (!clean.startsWith('abaaa5a1')) throw firstError
+  // 读取时可能一次收到 4 字节确认包 ABAAA5A1，紧接完整配置包 ABAA...。
+  // 此时若从第一个 ABAA 解析，“分组数”位置会落到完整包手动亮度头的绿光字节上；
+  // 绿光非零时可能误通过长度校验。因此先识别明确的双包边界，并只接受 24 组完整包。
+  if (clean.startsWith('abaaa5a1abaa')) {
+    const candidate = clean.slice(8)
+    try {
+      if (parseDevicePacketBody(candidate).groupCount === 24) return candidate
+    } catch (_) { /* 再按单包和后续候选继续解析 */ }
   }
-  // Socket 可能把 4 字节结果包 ABAAA5A1 与随后的配置包合并交付。
-  // 仅当第二个 ABAA 能通过完整报文校验时才剥离前置结果包；否则保留原包解析。
+
+  let directPacket = null
+  let directError = null
+  try {
+    directPacket = parseDevicePacketBody(clean)
+    if (directPacket.groupCount === 24) return clean
+  } catch (error) {
+    directError = error
+    if (!clean.startsWith('abaaa5a1')) throw error
+  }
+
+  // 兼容一个 Socket 响应中出现多个确认包；只选择能解析成 24 组的完整配置包。
   let candidateStart = clean.indexOf('abaa', 8)
   while (candidateStart >= 0) {
     const candidate = clean.slice(candidateStart)
     try {
-      parseDevicePacketBody(candidate)
-      return candidate
+      if (parseDevicePacketBody(candidate).groupCount === 24) return candidate
     } catch (_) {
-      candidateStart = clean.indexOf('abaa', candidateStart + 4)
+      // 继续查找下一个 ABAA 起点。
     }
+    candidateStart = clean.indexOf('abaa', candidateStart + 4)
   }
-  throw new Error('设备报文中未找到有效配置包')
+  if (directPacket) return clean
+  throw directError || new Error('设备报文中未找到有效配置包')
 }
 function parseDevicePacket(raw) {
   return parseDevicePacketBody(resolveDevicePacketHex(normalizeHexStream(raw)))
@@ -1884,6 +1915,50 @@ deviceDashboard.innerHTML = `
   </div>`
 document.querySelector('.app').append(deviceDashboard)
 
+const clusterControlModal = document.createElement('div')
+clusterControlModal.className = 'cluster-control-modal hidden'
+clusterControlModal.setAttribute('role', 'dialog')
+clusterControlModal.setAttribute('aria-modal', 'true')
+clusterControlModal.setAttribute('aria-labelledby', 'clusterControlTitle')
+clusterControlModal.innerHTML = `
+  <div class="cluster-control-shell">
+    <div class="cluster-control-head">
+      <div>
+        <h2 id="clusterControlTitle">集群群发配置</h2>
+        <p>把编辑器中的当前完整配置并发下发到选定设备。</p>
+      </div>
+      <button id="btnCloseClusterControl" type="button">关闭</button>
+    </div>
+    <div class="cluster-control-body">
+      <div class="cluster-control-settings">
+        <label class="sun-item">
+          <span>发送范围</span>
+          <select id="clusterTargetScope" class="sun-input"></select>
+        </label>
+        <div class="cluster-config-summary">
+          <span>发送内容</span>
+          <strong id="clusterConfigName">当前编辑器配置</strong>
+        </div>
+      </div>
+      <div class="cluster-target-head">
+        <strong id="clusterTargetCount">目标设备 · 0 台</strong>
+        <span>仅包含已缓存设备名称的灯具</span>
+      </div>
+      <div class="cluster-target-list" id="clusterTargetList"></div>
+    </div>
+    <div class="cluster-control-footer">
+      <div class="cluster-progress-area">
+        <div class="cluster-progress-track"><i id="clusterProgressBar"></i></div>
+        <span id="clusterProgressText">选择发送范围后开始群发</span>
+      </div>
+      <div class="cluster-control-actions">
+        <button id="btnCancelClusterControl" type="button">取消</button>
+        <button id="btnSendClusterConfig" class="cluster-send-button" type="button">发送当前配置</button>
+      </div>
+    </div>
+  </div>`
+document.querySelector('.app').append(clusterControlModal)
+
 const deviceStatus = document.getElementById('deviceStatus')
 const deviceHost = document.getElementById('deviceHost')
 const deviceSubnet = document.getElementById('deviceSubnet')
@@ -1904,6 +1979,12 @@ const deviceLogColumn = document.getElementById('deviceLogColumn')
 const deviceLogFloatingBody = document.getElementById('deviceLogFloatingBody')
 const deviceDashboardGrid = document.getElementById('deviceDashboardGrid')
 const deviceDashboardSummary = document.getElementById('deviceDashboardSummary')
+const clusterTargetScope = document.getElementById('clusterTargetScope')
+const clusterTargetList = document.getElementById('clusterTargetList')
+const clusterTargetCount = document.getElementById('clusterTargetCount')
+const clusterProgressBar = document.getElementById('clusterProgressBar')
+const clusterProgressText = document.getElementById('clusterProgressText')
+const clusterSendButton = document.getElementById('btnSendClusterConfig')
 const DEVICE_PAGE_MAX_ITEMS = 60
 const DEVICE_PAGE_MAX_ROWS = 30
 const DEVICE_NATURAL_LAYOUT_MAX_ROWS = 8
@@ -2039,6 +2120,7 @@ const assignCurrentDeviceGroup = (groupName) => {
   devicePage = 0
   devicePageRowCapacity = null
   renderDeviceList()
+  updateClusterEntrySummary()
   showDeviceStatus(group ? `已将“${name}”分到“${group}”` : `已将“${name}”设为未分组`)
 }
 const openDeviceGroupCreator = (anchor) => {
@@ -2138,6 +2220,7 @@ const cacheDeviceName = (host, name) => {
   deviceNames[host] = name
   localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
   rememberDeviceStatusHost(host, name)
+  updateClusterEntrySummary()
 }
 const recordDeviceConnectionFailure = (host) => {
   const failureCount = (deviceConnectionFailures.get(host) || 0) + 1
@@ -2156,6 +2239,7 @@ const recordDeviceConnectionFailure = (host) => {
     device.host === host ? { ...device, name: null } : device
   ))
   forgetDeviceStatusHost(host)
+  updateClusterEntrySummary()
   return removedName
 }
 const currentDeviceCachedName = () => {
@@ -2798,6 +2882,233 @@ const allSetPacket = () => {
   const time = [now.getHours(), now.getMinutes(), now.getSeconds()].map((value) => value.toString(16).padStart(2, '0')).join('')
   return `AAA51007${header}18${payload}01${time}BB`
 }
+let clusterSending = false
+let clusterResults = new Map()
+let clusterDisplayTargets = null
+
+const clusterNamedDevices = () => {
+  const byName = new Map()
+  Object.entries(deviceNames).forEach(([host, name]) => {
+    const resolvedHost = cleanText(host)
+    const resolvedName = cleanText(name)
+    if (resolvedHost && resolvedName) byName.set(resolvedName, { host: resolvedHost, name: resolvedName })
+  })
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_STATUS_HOSTS_STORAGE_KEY) || '[]')
+    if (Array.isArray(saved)) {
+      saved.forEach((device) => {
+        const host = cleanText(device?.host)
+        const name = cleanText(device?.name)
+        if (host && name && deviceNames[host] === name) byName.set(name, { host, name })
+      })
+    }
+  } catch { /* 名称缓存仍可作为集群目标 */ }
+  scannedDevices.forEach((device) => {
+    const host = cleanText(device.host)
+    const name = deviceNameForHost(host, device.name)
+    if (host && name) byName.set(name, { host, name })
+  })
+  return [...byName.values()]
+    .map((device) => ({ ...device, group: cleanText(deviceGroups[device.name]) }))
+    .sort((left, right) => (
+      left.group.localeCompare(right.group, 'zh-CN')
+      || left.name.localeCompare(right.name, 'zh-CN')
+      || left.host.localeCompare(right.host)
+    ))
+}
+
+const selectedClusterTargets = () => {
+  if (clusterDisplayTargets) return clusterDisplayTargets
+  const scope = clusterTargetScope.value || 'all'
+  const devices = clusterNamedDevices()
+  if (!scope.startsWith('group:')) return devices
+  const group = scope.slice(6)
+  return devices.filter((device) => device.group === group)
+}
+
+function updateClusterEntrySummary() {
+  const devices = clusterNamedDevices()
+  const groupCount = new Set(devices.map((device) => device.group).filter(Boolean)).size
+  document.getElementById('clusterEntrySummary').textContent = devices.length
+    ? `可群发 ${devices.length} 台设备${groupCount ? ` · ${groupCount} 个分组` : ' · 暂无分组'}`
+    : '暂无已缓存名称的设备'
+}
+
+const refreshClusterScopeOptions = () => {
+  const previous = clusterTargetScope.value || 'all'
+  const groups = [...new Set(clusterNamedDevices().map((device) => device.group).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  const options = [
+    new Option('全部已命名设备', 'all'),
+    ...groups.map((group) => new Option(`分组：${group}`, `group:${group}`)),
+  ]
+  clusterTargetScope.replaceChildren(...options)
+  clusterTargetScope.value = options.some((option) => option.value === previous) ? previous : 'all'
+}
+
+const clusterStatusLabel = (status) => ({
+  queued: '等待发送',
+  sending: '发送中',
+  success: '发送成功',
+  failed: '发送失败',
+}[status] || '等待发送')
+
+const renderClusterTargets = () => {
+  const targets = selectedClusterTargets()
+  clusterTargetCount.textContent = `目标设备 · ${targets.length} 台`
+  clusterSendButton.disabled = clusterSending || !targets.length
+  clusterSendButton.textContent = clusterSending ? '正在群发…' : `发送当前配置（${targets.length} 台）`
+
+  if (!targets.length) {
+    const empty = document.createElement('div')
+    empty.className = 'cluster-target-empty'
+    empty.textContent = clusterNamedDevices().length ? '当前分组没有可发送设备' : '暂无已缓存名称的设备，请先扫描并读取设备配置'
+    clusterTargetList.replaceChildren(empty)
+    return
+  }
+
+  clusterTargetList.replaceChildren(...targets.map((device) => {
+    const result = clusterResults.get(device.host) || { status: 'queued', message: '' }
+    const item = document.createElement('div')
+    item.className = 'cluster-target-item'
+    item.dataset.status = result.status
+    const identity = document.createElement('div')
+    identity.className = 'cluster-target-identity'
+    const name = document.createElement('strong')
+    name.textContent = device.name
+    const detail = document.createElement('span')
+    detail.textContent = [device.host, device.group || '未分组'].join(' · ')
+    identity.append(name, detail)
+    const stateBox = document.createElement('div')
+    stateBox.className = 'cluster-target-state'
+    const badge = document.createElement('strong')
+    badge.textContent = clusterStatusLabel(result.status)
+    const message = document.createElement('span')
+    message.textContent = result.message || '—'
+    message.title = result.message || ''
+    stateBox.append(badge, message)
+    item.append(identity, stateBox)
+    return item
+  }))
+}
+
+const updateClusterProgress = (completed, total, succeeded, failed) => {
+  const percent = total ? Math.round((completed / total) * 100) : 0
+  clusterProgressBar.style.width = `${percent}%`
+  clusterProgressText.textContent = completed
+    ? `进度 ${completed}/${total} · 成功 ${succeeded} · 失败 ${failed}`
+    : `准备向 ${total} 台设备发送当前配置`
+}
+
+const closeClusterControl = () => {
+  if (clusterSending) {
+    clusterProgressText.textContent = '群发正在进行，请等待全部设备完成'
+    return
+  }
+  clusterControlModal.classList.add('hidden')
+  document.body.classList.remove('cluster-control-open')
+}
+
+const openClusterControl = () => {
+  clusterResults = new Map()
+  clusterDisplayTargets = null
+  refreshClusterScopeOptions()
+  const schemeName = cleanText(document.getElementById('lightingSchemeName').value)
+  document.getElementById('clusterConfigName').textContent = schemeName || '当前编辑器配置（未命名）'
+  clusterProgressBar.style.width = '0%'
+  clusterProgressText.textContent = '选择发送范围后开始群发'
+  clusterControlModal.classList.remove('hidden')
+  document.body.classList.add('cluster-control-open')
+  renderClusterTargets()
+}
+
+const sendClusterConfiguration = async () => {
+  if (clusterSending) return
+  const targets = selectedClusterTargets()
+  if (!targets.length) return
+
+  let command
+  try {
+    refreshAll()
+    command = allSetPacket()
+  } catch (error) {
+    clusterProgressText.textContent = `无法生成当前配置：${error.message}`
+    return
+  }
+
+  clusterSending = true
+  clusterDisplayTargets = [...targets]
+  clusterResults = new Map(targets.map((device) => [device.host, { status: 'queued', message: '' }]))
+  clusterTargetScope.disabled = true
+  document.getElementById('btnCloseClusterControl').disabled = true
+  document.getElementById('btnCancelClusterControl').disabled = true
+  renderClusterTargets()
+  updateClusterProgress(0, targets.length, 0, 0)
+
+  let completed = 0
+  let succeeded = 0
+  let failed = 0
+  const queue = [...targets]
+  const worker = async () => {
+    while (queue.length) {
+      const device = queue.shift()
+      clusterResults.set(device.host, { status: 'sending', message: '正在连接…' })
+      renderClusterTargets()
+      addPacketLog('→', device.host, command)
+      try {
+        const result = await api('/api/send', { host: device.host, command, timeout: 1800 })
+        if (!cleanText(result.response)) throw new Error('设备未返回数据')
+        deviceConnectionFailures.delete(device.host)
+        rememberDeviceStatusHost(device.host, device.name)
+        addPacketLog('←', device.host, result.response)
+        clusterResults.set(device.host, { status: 'success', message: `收到 ${result.response}` })
+        succeeded += 1
+      } catch (error) {
+        const removedName = recordDeviceConnectionFailure(device.host)
+        const message = removedName
+          ? `${error.message}；连续失败，已移除名称缓存“${removedName}”`
+          : error.message
+        addPacketLog('×', device.host, message)
+        clusterResults.set(device.host, { status: 'failed', message })
+        failed += 1
+      }
+      completed += 1
+      updateClusterProgress(completed, targets.length, succeeded, failed)
+      renderClusterTargets()
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(4, targets.length) }, worker))
+  clusterSending = false
+  clusterTargetScope.disabled = false
+  document.getElementById('btnCloseClusterControl').disabled = false
+  document.getElementById('btnCancelClusterControl').disabled = false
+  renderClusterTargets()
+  updateClusterEntrySummary()
+  renderDeviceList()
+  updateCurrentDeviceSummary()
+  showDeviceStatus(`集群配置发送完成：成功 ${succeeded} 台，失败 ${failed} 台`)
+}
+
+document.getElementById('btnOpenClusterControl').onclick = openClusterControl
+document.getElementById('btnCloseClusterControl').onclick = closeClusterControl
+document.getElementById('btnCancelClusterControl').onclick = closeClusterControl
+clusterTargetScope.addEventListener('change', () => {
+  clusterResults = new Map()
+  clusterDisplayTargets = null
+  clusterProgressBar.style.width = '0%'
+  clusterProgressText.textContent = '选择发送范围后开始群发'
+  renderClusterTargets()
+})
+clusterSendButton.onclick = sendClusterConfiguration
+clusterControlModal.addEventListener('pointerdown', (event) => {
+  if (event.target === clusterControlModal) closeClusterControl()
+})
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !clusterControlModal.classList.contains('hidden')) closeClusterControl()
+})
+updateClusterEntrySummary()
+
 const readDeviceConfiguration = async () => {
   const host = currentHost()
   const result = await sendDevice('AAA51008BB', '读取配置')
@@ -2834,6 +3145,7 @@ document.getElementById('btnClearDeviceCache').onclick = () => {
   devicePage = 0
   deviceLogForcedBySpace = false
   showDeviceStatus(cachedCount ? `已清理 ${cachedCount} 台灯具的名称缓存` : '当前没有缓存设备')
+  updateClusterEntrySummary()
   renderDeviceList()
   updateCurrentDeviceSummary()
 }

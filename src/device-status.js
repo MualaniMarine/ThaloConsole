@@ -75,14 +75,31 @@ function parsePacketBody(clean) {
 }
 function resolvePacket(value) {
   const clean = normalizeHexStream(value)
-  try { return parsePacketBody(clean) } catch (firstError) {
-    if (!clean.startsWith('abaaa5a1')) throw firstError
+  if (clean.startsWith('abaaa5a1abaa')) {
+    try {
+      const candidate = parsePacketBody(clean.slice(8))
+      if (candidate.groupCount === 24) return candidate
+    } catch { /* 再按单包和后续候选继续解析 */ }
+  }
+  let directPacket = null
+  let directError = null
+  try {
+    directPacket = parsePacketBody(clean)
+    if (directPacket.groupCount === 24) return directPacket
+  } catch (error) {
+    directError = error
+    if (!clean.startsWith('abaaa5a1')) throw error
   }
   let start = clean.indexOf('abaa', 8)
   while (start >= 0) {
-    try { return parsePacketBody(clean.slice(start)) } catch { start = clean.indexOf('abaa', start + 4) }
+    try {
+      const candidate = parsePacketBody(clean.slice(start))
+      if (candidate.groupCount === 24) return candidate
+    } catch { /* 继续查找下一个 ABAA 起点 */ }
+    start = clean.indexOf('abaa', start + 4)
   }
-  throw new Error('未找到完整配置报文')
+  if (directPacket) return directPacket
+  throw directError || new Error('未找到完整配置报文')
 }
 function parseGroups(payload) {
   if (payload.length % 16) throw new Error('时序分组长度无效')
