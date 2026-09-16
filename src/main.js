@@ -309,6 +309,47 @@ rightToolsColumn.append(
   document.getElementById('rawCard'),
   rightToolsColumn.querySelector('.footer-card'),
 )
+const operationOutput = document.querySelector('.operation-output')
+const operationOutputHome = document.querySelector('#operationCard .card-body')
+const rightToolsToggle = document.createElement('button')
+rightToolsToggle.id = 'btnToggleRightToolsDrawer'
+rightToolsToggle.className = 'right-tools-toggle hidden'
+rightToolsToggle.type = 'button'
+rightToolsToggle.setAttribute('aria-controls', 'operationCard')
+document.querySelector('.app').append(rightToolsToggle)
+
+function setRightToolsDrawer(open) {
+  const layout = document.getElementById('layout')
+  layout.classList.add('right-tools-drawer-active')
+  layout.classList.toggle('right-tools-drawer-open', open)
+  rightToolsToggle.classList.remove('hidden')
+  rightToolsToggle.textContent = open ? '›' : '‹'
+  rightToolsToggle.title = open ? '收起右侧工具' : '展开右侧工具'
+  rightToolsToggle.setAttribute('aria-label', rightToolsToggle.title)
+  rightToolsToggle.setAttribute('aria-expanded', String(open))
+
+  const liveStatusHome = document.getElementById('deviceLiveStatusHome')
+  if (open || !liveStatusHome) {
+    operationOutputHome.append(operationOutput)
+    operationOutput.classList.remove('relocated-operation-output')
+  } else {
+    liveStatusHome.append(operationOutput)
+    operationOutput.classList.add('relocated-operation-output')
+  }
+  requestAnimationFrame(() => {
+    syncWorkspaceColumnHeights()
+    scheduleDeviceListRender(true)
+    renderTrendChart()
+  })
+}
+rightToolsToggle.onclick = () => {
+  const layout = document.getElementById('layout')
+  setRightToolsDrawer(!layout.classList.contains('right-tools-drawer-open'))
+}
+document.addEventListener('keydown', (event) => {
+  const layout = document.getElementById('layout')
+  if (event.key === 'Escape' && layout.classList.contains('right-tools-drawer-open')) setRightToolsDrawer(false)
+})
 
 function clamp(v, lo, hi) {
   const n = Number.parseInt(v, 10)
@@ -1794,7 +1835,7 @@ window.addEventListener('resize', () => {
 const devicePanel = document.createElement('div')
 devicePanel.className = 'card device-card'
 devicePanel.innerHTML = `
-  <div class="card-head"><div class="card-head-row"><div><div class="card-title">灯具连接与控制</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div><button id="btnHideDeviceCard" class="card-hide-button" type="button">隐藏</button></div></div>
+  <div class="card-head"><div class="card-head-row"><div><div class="card-title">灯具连接与控制</div><div class="card-sub">局域网扫描或 AP 模式指定 IP；TCP 8266</div></div><div class="card-head-actions"><button id="btnOpenDeviceDashboard" class="card-head-button" type="button">设备状态页</button><button id="btnHideDeviceCard" class="card-hide-button" type="button">隐藏</button></div></div></div>
   <div class="card-body">
     <div class="device-connection-summary">
       <div class="device-summary-item"><span>当前连接设备名称</span><strong id="currentDeviceName">—</strong></div>
@@ -1813,7 +1854,7 @@ devicePanel.innerHTML = `
     <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnClearDeviceCache" title="清除本机保存的灯具名称缓存">清理缓存设备</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnModeToggle">切换手动模式</button><button id="btnDemoToggle">开启演示模式</button></div>
     <div class="device-list-head"><i aria-hidden="true"></i><span>可连接灯具 · <strong id="deviceListCount">0 台</strong></span><i aria-hidden="true"></i></div>
     <div id="deviceList" class="muted"></div><div id="devicePagination" class="device-pagination"></div>
-    <div id="deviceLogHome"><div id="deviceLogSection" class="device-log-section"><div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre></div></div>
+    <div id="deviceLogHome"><div id="deviceLogSection" class="device-log-section"><div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre><div id="deviceLiveStatusHome"></div></div></div>
   </div>`
 const deviceColumn = document.createElement('div')
 deviceColumn.className = 'device-col'
@@ -1821,6 +1862,27 @@ deviceColumn.append(devicePanel)
 document.querySelector('.layout').insertBefore(deviceColumn, document.getElementById('deviceLogColumn'))
 document.getElementById('btnHideDeviceCard').onclick = () => setDevicePanelVisible(false)
 syncPanelVisibilityButtons()
+
+const deviceDashboard = document.createElement('div')
+deviceDashboard.className = 'device-dashboard hidden'
+deviceDashboard.setAttribute('role', 'dialog')
+deviceDashboard.setAttribute('aria-modal', 'true')
+deviceDashboard.setAttribute('aria-labelledby', 'deviceDashboardTitle')
+deviceDashboard.innerHTML = `
+  <div class="device-dashboard-shell">
+    <div class="device-dashboard-head">
+      <div>
+        <h2 id="deviceDashboardTitle">多设备状态</h2>
+        <p id="deviceDashboardSummary">并发读取设备状态和照明曲线</p>
+      </div>
+      <div class="device-dashboard-actions">
+        <button id="btnRefreshDeviceDashboard" type="button">立即刷新</button>
+        <button id="btnCloseDeviceDashboard" type="button">关闭</button>
+      </div>
+    </div>
+    <div class="device-dashboard-grid" id="deviceDashboardGrid"></div>
+  </div>`
+document.querySelector('.app').append(deviceDashboard)
 
 const deviceStatus = document.getElementById('deviceStatus')
 const deviceHost = document.getElementById('deviceHost')
@@ -1840,6 +1902,8 @@ const deviceLogHome = document.getElementById('deviceLogHome')
 const deviceLogSection = document.getElementById('deviceLogSection')
 const deviceLogColumn = document.getElementById('deviceLogColumn')
 const deviceLogFloatingBody = document.getElementById('deviceLogFloatingBody')
+const deviceDashboardGrid = document.getElementById('deviceDashboardGrid')
+const deviceDashboardSummary = document.getElementById('deviceDashboardSummary')
 const DEVICE_PAGE_MAX_ITEMS = 60
 const DEVICE_PAGE_MAX_ROWS = 30
 const DEVICE_NATURAL_LAYOUT_MAX_ROWS = 8
@@ -1858,9 +1922,15 @@ let devicePageRowCapacity = null
 let deviceLogForcedBySpace = false
 const deviceRuntimeStates = new Map()
 const deviceConnectionFailures = new Map()
+const deviceDashboardStates = new Map()
+let monitoredDeviceHosts = []
+let deviceDashboardTimer = null
+let deviceDashboardRefreshing = false
 const DEVICE_NAME_STORAGE_KEY = 'thalo-console-device-names-v1'
 const DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-by-name-v2'
 const LEGACY_DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-v1'
+const DEVICE_STATUS_HOSTS_STORAGE_KEY = 'thalo-console-status-hosts-v1'
+const DEVICE_RUNTIME_STORAGE_KEY = 'thalo-console-device-runtime-v1'
 const deviceNames = (() => {
   try {
     const saved = JSON.parse(localStorage.getItem(DEVICE_NAME_STORAGE_KEY) || '{}')
@@ -1898,6 +1968,40 @@ const deviceNameForHost = (host, name = null) => cleanText(name ?? scannedDevice
 const deviceGroupForHost = (host, name = null) => {
   const resolvedName = deviceNameForHost(host, name)
   return resolvedName ? deviceGroups[resolvedName] || '' : ''
+}
+const rememberDeviceStatusHost = (host, name) => {
+  const resolvedHost = cleanText(host)
+  const resolvedName = cleanText(name)
+  if (!resolvedHost || !resolvedName) return
+  let saved = []
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DEVICE_STATUS_HOSTS_STORAGE_KEY) || '[]')
+    if (Array.isArray(parsed)) saved = parsed
+  } catch { /* 用当前设备重新建立状态页清单 */ }
+  const byHost = new Map(saved
+    .filter((item) => cleanText(item?.name) !== resolvedName || cleanText(item?.host) === resolvedHost)
+    .map((item) => [cleanText(item?.host), item])
+    .filter(([savedHost]) => savedHost))
+  byHost.set(resolvedHost, { host: resolvedHost, name: resolvedName })
+  localStorage.setItem(DEVICE_STATUS_HOSTS_STORAGE_KEY, JSON.stringify([...byHost.values()]))
+}
+const forgetDeviceStatusHost = (host) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_STATUS_HOSTS_STORAGE_KEY) || '[]')
+    if (!Array.isArray(saved)) return
+    const remaining = saved.filter((item) => cleanText(item?.host) !== host)
+    if (remaining.length) localStorage.setItem(DEVICE_STATUS_HOSTS_STORAGE_KEY, JSON.stringify(remaining))
+    else localStorage.removeItem(DEVICE_STATUS_HOSTS_STORAGE_KEY)
+  } catch { /* 状态页清单损坏时不影响名称缓存清理 */ }
+}
+const persistDeviceRuntimeState = (host, runtime) => {
+  let saved = {}
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DEVICE_RUNTIME_STORAGE_KEY) || '{}')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed
+  } catch { /* 重新建立运行状态缓存 */ }
+  saved[host] = { mode: runtime.mode, demoStartedAt: runtime.demoStartedAt }
+  localStorage.setItem(DEVICE_RUNTIME_STORAGE_KEY, JSON.stringify(saved))
 }
 const refreshDeviceGroupOptions = () => {
   const groups = savedDeviceGroupNames()
@@ -2033,6 +2137,7 @@ const cacheDeviceName = (host, name) => {
   if (groupChanged) saveDeviceGroups()
   deviceNames[host] = name
   localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
+  rememberDeviceStatusHost(host, name)
 }
 const recordDeviceConnectionFailure = (host) => {
   const failureCount = (deviceConnectionFailures.get(host) || 0) + 1
@@ -2050,6 +2155,7 @@ const recordDeviceConnectionFailure = (host) => {
   scannedDevices = scannedDevices.map((device) => (
     device.host === host ? { ...device, name: null } : device
   ))
+  forgetDeviceStatusHost(host)
   return removedName
 }
 const currentDeviceCachedName = () => {
@@ -2113,6 +2219,7 @@ function updateDeviceRuntimeSummary() {
   if (runtime.mode === 'demo' && Date.now() - (runtime.demoStartedAt || Date.now()) >= 240000) {
     runtime.mode = 'automatic'
     runtime.demoStartedAt = null
+    persistDeviceRuntimeState(currentHost(), runtime)
   }
   const demoMinute = runtime.mode === 'demo'
     ? Math.min(1439.999, ((Date.now() - (runtime.demoStartedAt || Date.now())) / 240000) * 1440)
@@ -2158,12 +2265,14 @@ const setDeviceMode = (host, mode) => {
     runtime.demoStartedAt = null
   }
   runtime.mode = mode
+  persistDeviceRuntimeState(host, runtime)
   updateDeviceRuntimeSummary()
 }
 const stopDeviceDemoMode = (host) => {
   const runtime = runtimeStateForHost(host)
   runtime.mode = 'automatic'
   runtime.demoStartedAt = null
+  persistDeviceRuntimeState(host, runtime)
   updateDeviceRuntimeSummary()
 }
 const updateCurrentDeviceSummary = (state = undefined) => {
@@ -2228,6 +2337,275 @@ const sendDevice = async (command, label) => {
     throw error
   }
 }
+const dashboardModeLabel = (mode) => ({
+  automatic: '自动模式',
+  manual: '手动模式',
+  demo: '演示模式',
+  unknown: '未获取',
+}[mode] || '未获取')
+const dashboardTimestamp = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
+const dashboardCurveValues = (groups, minute) => {
+  if (!groups?.length) return []
+  const points = groups.map((group) => ({ minute: group[0] * 60 + group[1], values: group.slice(2, 8) }))
+  const target = ((minute % 1440) + 1440) % 1440
+  let previous
+  let next
+  const nextIndex = points.findIndex((point) => point.minute >= target)
+  if (nextIndex === 0) {
+    previous = { ...points.at(-1), minute: points.at(-1).minute - 1440 }
+    next = points[0]
+  } else if (nextIndex < 0) {
+    previous = points.at(-1)
+    next = { ...points[0], minute: points[0].minute + 1440 }
+  } else {
+    previous = points[nextIndex - 1]
+    next = points[nextIndex]
+  }
+  const ratio = Math.max(0, Math.min(1, (target - previous.minute) / Math.max(1, next.minute - previous.minute)))
+  return previous.values.map((value, index) => value + (next.values[index] - value) * ratio)
+}
+const parseDashboardDevicePacket = (host, response) => {
+  const packet = parseDevicePacket(response)
+  const groups = chunk16(packet.payload).map(parseGroup)
+  const name = readDeviceName(response) || deviceNameForHost(host) || host
+  const reportedMode = readDeviceMode(response) || 'unknown'
+  const runtime = runtimeStateForHost(host)
+  const demoElapsed = Date.now() - (runtime.demoStartedAt || Date.now())
+  if (runtime.mode === 'demo' && demoElapsed >= 240000) {
+    runtime.mode = 'automatic'
+    runtime.demoStartedAt = null
+  }
+  const mode = runtime.mode === 'demo' ? 'demo' : reportedMode
+  if (mode !== 'demo' && reportedMode !== 'unknown') {
+    runtime.mode = reportedMode
+    runtime.demoStartedAt = null
+  }
+  const now = new Date()
+  const targetMinute = mode === 'demo'
+    ? Math.min(1439.999, (demoElapsed / 240000) * 1440)
+    : now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+  const values = mode === 'manual'
+    ? LIGHT_FIELDS.map((_, index) => parseHexByte(packet.header.slice(index * 2, index * 2 + 2)))
+    : dashboardCurveValues(groups, targetMinute)
+  const brightness = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+  return { name, mode, groups, brightness }
+}
+const drawDashboardCurve = (canvas, groups) => {
+  if (!canvas || !groups?.length) return
+  const width = Math.max(220, Math.round(canvas.clientWidth || 300))
+  const height = Math.max(90, Math.round(canvas.clientHeight || 100))
+  const dpr = Math.max(1, window.devicePixelRatio || 1)
+  canvas.width = Math.round(width * dpr)
+  canvas.height = Math.round(height * dpr)
+  const ctx = canvas.getContext('2d')
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, width, height)
+  ctx.strokeStyle = '#e8eef6'
+  ctx.lineWidth = 1
+  ;[0, 0.5, 1].forEach((ratio) => {
+    const y = 8 + ratio * (height - 16)
+    ctx.beginPath()
+    ctx.moveTo(8, y)
+    ctx.lineTo(width - 8, y)
+    ctx.stroke()
+  })
+  const channelColors = LIGHT_FIELDS.map((field) => COLORS[field][1])
+  channelColors.forEach((color, channelIndex) => {
+    ctx.beginPath()
+    groups.forEach((group, index) => {
+      const minute = group[0] * 60 + group[1]
+      const x = 8 + (minute / 1439) * (width - 16)
+      const y = height - 8 - (group[channelIndex + 2] / 100) * (height - 16)
+      if (index === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  })
+}
+const collectDashboardDevices = () => {
+  const byHost = new Map()
+  scannedDevices.forEach((device) => {
+    const name = deviceNameForHost(device.host, device.name)
+    if (name) byHost.set(device.host, { host: device.host, name })
+  })
+  const host = currentHost()
+  const currentName = deviceNameForHost(host)
+  if (host && currentName) byHost.set(host, { host, name: currentName })
+  return [...byHost.values()].sort((left, right) => {
+    const leftGroup = deviceGroupForHost(left.host, left.name)
+    const rightGroup = deviceGroupForHost(right.host, right.name)
+    return leftGroup.localeCompare(rightGroup, 'zh-CN') || left.name.localeCompare(right.name, 'zh-CN')
+  })
+}
+const renderDeviceDashboard = () => {
+  const states = monitoredDeviceHosts.map((host) => deviceDashboardStates.get(host) || { host, status: 'waiting' })
+  const connectedCount = states.filter((item) => item.status === 'connected' || item.status === 'warning').length
+  const refreshingCount = states.filter((item) => item.status === 'connecting').length
+  deviceDashboardSummary.textContent = states.length
+    ? `监控 ${states.length} 台 · 已连接 ${connectedCount} 台${refreshingCount ? ` · 正在刷新 ${refreshingCount} 台` : ''} · 每分钟自动刷新`
+    : '暂无已命名设备，请先扫描并读取灯具配置'
+
+  if (!states.length) {
+    const empty = document.createElement('div')
+    empty.className = 'device-dashboard-empty'
+    empty.textContent = '扫描设备并读取名称后，设备会显示在这里。'
+    deviceDashboardGrid.replaceChildren(empty)
+    return
+  }
+
+  const cards = states.map((state) => {
+    const card = document.createElement('article')
+    card.className = 'device-status-card'
+    card.dataset.status = state.status
+    const head = document.createElement('div')
+    head.className = 'device-status-card-head'
+    const identity = document.createElement('div')
+    const name = document.createElement('strong')
+    name.textContent = state.name || deviceNameForHost(state.host) || '未命名设备'
+    const ip = document.createElement('span')
+    ip.textContent = state.host
+    identity.append(name, ip)
+    const badge = document.createElement('span')
+    badge.className = 'device-status-badge'
+    badge.textContent = ({ connected: '已连接', connecting: '连接中', warning: '回包异常', failed: '连接失败' })[state.status] || '等待刷新'
+    head.append(identity, badge)
+
+    const info = document.createElement('div')
+    info.className = 'device-status-info'
+    const entries = [
+      ['设备分组', deviceGroupForHost(state.host, state.name) || '未分组'],
+      ['运行模式', dashboardModeLabel(state.mode)],
+      ['当前总亮度', Number.isFinite(state.brightness) ? `${Math.round(state.brightness * 10) / 10}%` : '—'],
+      ['更新时间', state.updatedAt || '—'],
+    ]
+    entries.forEach(([label, value]) => {
+      const item = document.createElement('div')
+      const labelElement = document.createElement('span')
+      labelElement.textContent = label
+      const valueElement = document.createElement('strong')
+      valueElement.textContent = value
+      item.append(labelElement, valueElement)
+      info.append(item)
+    })
+
+    const chartTitle = document.createElement('div')
+    chartTitle.className = 'device-status-chart-title'
+    chartTitle.textContent = '照明曲线'
+    const canvas = document.createElement('canvas')
+    canvas.className = 'device-status-curve'
+    const footer = document.createElement('div')
+    footer.className = 'device-status-card-footer'
+    const message = document.createElement('span')
+    message.textContent = state.error || '六通道 24 小时曲线'
+    const selectButton = document.createElement('button')
+    selectButton.type = 'button'
+    selectButton.textContent = '设为当前设备'
+    selectButton.onclick = () => {
+      deviceHost.value = state.host
+      if (state.status === 'connected' || state.status === 'warning') connectedHost = state.host
+      updateCurrentDeviceSummary()
+      closeDeviceDashboard()
+    }
+    footer.append(message, selectButton)
+    card.append(head, info, chartTitle, canvas, footer)
+    requestAnimationFrame(() => drawDashboardCurve(canvas, state.groups))
+    return card
+  })
+  deviceDashboardGrid.replaceChildren(...cards)
+}
+const refreshDashboardDevice = async (host) => {
+  const previous = deviceDashboardStates.get(host) || { host, name: deviceNameForHost(host) }
+  deviceDashboardStates.set(host, { ...previous, status: 'connecting', error: '' })
+  renderDeviceDashboard()
+  try {
+    const result = await api('/api/send', { host, command: 'AAA51008BB', timeout: 1600 })
+    if (!cleanText(result.response)) throw new Error('设备未返回数据')
+    deviceConnectionFailures.delete(host)
+    try {
+      const parsed = parseDashboardDevicePacket(host, result.response)
+      if (parsed.name && parsed.name !== host) cacheDeviceName(host, parsed.name)
+      deviceDashboardStates.set(host, {
+        host,
+        ...parsed,
+        status: 'connected',
+        updatedAt: dashboardTimestamp(),
+        error: '',
+      })
+    } catch (error) {
+      deviceDashboardStates.set(host, {
+        ...previous,
+        host,
+        status: 'warning',
+        updatedAt: dashboardTimestamp(),
+        error: `已收到回包，但配置解析失败：${error.message}`,
+      })
+    }
+  } catch (error) {
+    const removedName = recordDeviceConnectionFailure(host)
+    deviceDashboardStates.set(host, {
+      ...previous,
+      host,
+      status: 'failed',
+      updatedAt: dashboardTimestamp(),
+      error: removedName ? `${error.message}；已移除名称缓存“${removedName}”` : error.message,
+    })
+    if (removedName) {
+      renderDeviceList()
+      if (host === currentHost()) updateCurrentDeviceSummary('failed')
+    }
+  }
+  renderDeviceDashboard()
+}
+const refreshDeviceDashboard = async () => {
+  if (deviceDashboardRefreshing || deviceDashboard.classList.contains('hidden')) return
+  deviceDashboardRefreshing = true
+  document.getElementById('btnRefreshDeviceDashboard').disabled = true
+  const queue = [...monitoredDeviceHosts]
+  await Promise.all(Array.from({ length: Math.min(6, queue.length) }, async () => {
+    while (queue.length) await refreshDashboardDevice(queue.shift())
+  }))
+  deviceDashboardRefreshing = false
+  document.getElementById('btnRefreshDeviceDashboard').disabled = false
+}
+function closeDeviceDashboard() {
+  deviceDashboard.classList.add('hidden')
+  document.body.classList.remove('device-dashboard-open')
+  clearInterval(deviceDashboardTimer)
+  deviceDashboardTimer = null
+}
+const openDeviceDashboard = () => {
+  const candidates = collectDashboardDevices()
+  monitoredDeviceHosts = candidates.map((device) => device.host)
+  candidates.forEach((device) => {
+    const previous = deviceDashboardStates.get(device.host) || {}
+    deviceDashboardStates.set(device.host, {
+      ...previous,
+      host: device.host,
+      name: device.name,
+      status: previous.status || 'waiting',
+    })
+  })
+  deviceDashboard.classList.remove('hidden')
+  document.body.classList.add('device-dashboard-open')
+  renderDeviceDashboard()
+  refreshDeviceDashboard()
+  clearInterval(deviceDashboardTimer)
+  deviceDashboardTimer = setInterval(refreshDeviceDashboard, 60000)
+}
+document.getElementById('btnOpenDeviceDashboard').onclick = () => {
+  collectDashboardDevices().forEach((device) => rememberDeviceStatusHost(device.host, device.name))
+  window.open(new URL('device-status.html', document.baseURI).href, '_blank', 'noopener')
+}
+document.getElementById('btnRefreshDeviceDashboard').onclick = refreshDeviceDashboard
+document.getElementById('btnCloseDeviceDashboard').onclick = closeDeviceDashboard
+deviceDashboard.addEventListener('pointerdown', (event) => {
+  if (event.target === deviceDashboard) closeDeviceDashboard()
+})
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !deviceDashboard.classList.contains('hidden')) closeDeviceDashboard()
+})
 const deviceRowCount = (devices) => {
   const hasNamedDevice = devices.some((device) => Boolean(device.name ?? deviceNames[device.host]))
   return Math.ceil(devices.length / (hasNamedDevice ? 2 : 3))
@@ -2436,6 +2814,7 @@ const readDeviceConfiguration = async () => {
   showDeviceStatus(`已读取并导入灯具配置${name ? `：${name}` : ''}`)
 }
 document.getElementById('btnDeviceScan').onclick = async () => {
+  setRightToolsDrawer(false)
   try {
     showDeviceStatus('正在扫描当前网段的 TCP 8266 设备（与 App 相同，约需数秒）…')
     const result = await api('/api/scan', { subnet: deviceSubnet.value.trim() || undefined })
