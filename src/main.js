@@ -1,6 +1,7 @@
 import './styles.css'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
+import { findDeviceInventoryRecord, observedMac, persistDeviceObservations } from './device-identity.js'
 
 const FIELDS = ['小时', '分钟', '白光', '深蓝光', '绿色光', 'UV', '浅蓝光', '红色光']
 const LIGHT_FIELDS = ['白光', '深蓝光', '绿色光', 'UV', '浅蓝光', '红色光']
@@ -1882,7 +1883,7 @@ devicePanel.innerHTML = `
         <button id="btnAddDeviceGroup" type="button">新建分组</button>
       </div>
     </div>
-    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnClearDeviceCache" title="清除本机保存的灯具名称缓存">清理缓存设备</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnModeToggle">切换手动模式</button><button id="btnDemoToggle">开启演示模式</button></div>
+    <div class="toolbar-grid"><button id="btnDeviceScan">扫描局域网</button><button id="btnEditDeviceInfo" type="button" aria-haspopup="dialog">编辑设备信息</button><button id="btnDeviceRead">读取配置</button><button id="btnDevicePush">发送当前配置</button><button id="btnSendManual">发送当前亮度</button><button id="btnDeviceSync">同步时间</button><button id="btnModeToggle">切换手动模式</button><button id="btnDemoToggle">开启演示模式</button></div>
     <div class="device-list-head"><i aria-hidden="true"></i><span>可连接灯具 · <strong id="deviceListCount">0 台</strong></span><i aria-hidden="true"></i></div>
     <div id="deviceList" class="muted"></div><div id="devicePagination" class="device-pagination"></div>
     <div id="deviceLogHome"><div id="deviceLogSection" class="device-log-section"><div class="device-log-head"><span>报文日志</span><span><button id="btnExportDeviceLog" type="button">导出</button><button id="btnClearDeviceLog" type="button">清空</button></span></div><pre id="deviceLog" class="device-log">等待设备通信…</pre><div id="deviceLiveStatusHome"></div></div></div>
@@ -1893,6 +1894,36 @@ deviceColumn.append(devicePanel)
 document.querySelector('.layout').insertBefore(deviceColumn, document.getElementById('deviceLogColumn'))
 document.getElementById('btnHideDeviceCard').onclick = () => setDevicePanelVisible(false)
 syncPanelVisibilityButtons()
+
+const deviceInfoEditor = document.createElement('dialog')
+deviceInfoEditor.className = 'device-info-editor'
+deviceInfoEditor.setAttribute('aria-labelledby', 'deviceInfoEditorTitle')
+deviceInfoEditor.innerHTML = `
+  <form id="deviceInfoEditorForm" class="device-info-shell">
+    <div class="device-info-head">
+      <div><h2 id="deviceInfoEditorTitle">设备信息编辑</h2><p>修改本机保存的设备信息，保存后在设备列表和状态页中使用。</p></div>
+      <button id="btnCloseDeviceInfoEditor" type="button" autofocus>关闭</button>
+    </div>
+    <div class="device-info-toolbar">
+      <button id="btnClearDeviceCache" type="button" title="清除本机保存的灯具名称、SN 和 MAC 信息">清理缓存设备</button>
+      <label class="file-label" id="deviceInfoImportLabel" tabindex="0" role="button">导入设备信息<input id="deviceInfoFile" type="file" accept="application/json,.json" /></label>
+      <button id="btnExportDeviceInfo" type="button">导出设备信息</button>
+    </div>
+    <div class="device-info-sort" role="group" aria-label="设备信息快速排序">
+      <span>快速排序</span>
+      <button type="button" data-device-info-sort="name">设备名称</button>
+      <button type="button" data-device-info-sort="group">设备分组</button>
+      <button type="button" data-device-info-sort="sn">SN 编号</button>
+      <button type="button" data-device-info-sort="mac">MAC 地址</button>
+      <button type="button" data-device-info-sort="lastIp">最近 IP</button>
+    </div>
+    <div class="device-info-body" id="deviceInfoEditorRows"></div>
+    <div class="device-info-footer">
+      <span id="deviceInfoEditorStatus" role="status" aria-live="polite"></span>
+      <button id="btnSaveDeviceInfo" class="device-info-save" type="submit">保存设备信息</button>
+    </div>
+  </form>`
+document.querySelector('.app').append(deviceInfoEditor)
 
 const deviceDashboard = document.createElement('div')
 deviceDashboard.className = 'device-dashboard hidden'
@@ -2002,6 +2033,7 @@ let deviceLogFitFrame = 0
 let devicePageRowCapacity = null
 let deviceLogForcedBySpace = false
 const deviceRuntimeStates = new Map()
+const observedDeviceMacs = new Map()
 const deviceConnectionFailures = new Map()
 const deviceDashboardStates = new Map()
 let monitoredDeviceHosts = []
@@ -2010,6 +2042,7 @@ let deviceDashboardRefreshing = false
 const DEVICE_NAME_STORAGE_KEY = 'thalo-console-device-names-v1'
 const DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-by-name-v2'
 const LEGACY_DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-v1'
+const DEVICE_INVENTORY_STORAGE_KEY = 'thalo-console-device-inventory-v1'
 const DEVICE_STATUS_HOSTS_STORAGE_KEY = 'thalo-console-status-hosts-v1'
 const DEVICE_RUNTIME_STORAGE_KEY = 'thalo-console-device-runtime-v1'
 const deviceNames = (() => {
@@ -2040,7 +2073,62 @@ const deviceGroups = (() => {
     return groups
   } catch { return {} }
 })()
-const savedDeviceGroupNames = () => [...new Set(Object.values(deviceGroups).map(cleanText).filter(Boolean))]
+const normalizeMacAddress = (value) => {
+  const raw = cleanText(value).toUpperCase()
+  if (!raw) return ''
+  const compact = raw.replace(/[:-]/g, '')
+  return /^[0-9A-F]{12}$/.test(compact) ? compact.match(/.{2}/g).join(':') : raw
+}
+const normalizeDeviceInventoryRecord = (value = {}) => ({
+  sn: cleanText(value.sn ?? value.SN编号).toUpperCase(),
+  mac: normalizeMacAddress(value.mac ?? value.MAC地址 ?? value.MAC),
+  name: cleanText(value.name ?? value.设备名称),
+  group: cleanText(value.group ?? value.设备分组),
+  lastIp: cleanText(value.lastIp ?? value.最近IP),
+})
+let deviceInventory = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_INVENTORY_STORAGE_KEY) || '[]')
+    return Array.isArray(saved)
+      ? saved.map(normalizeDeviceInventoryRecord).filter((item) => item.name && (item.sn || item.mac || item.lastIp))
+      : []
+  } catch { return [] }
+})()
+const saveDeviceInventory = () => {
+  if (deviceInventory.length) localStorage.setItem(DEVICE_INVENTORY_STORAGE_KEY, JSON.stringify(deviceInventory))
+  else localStorage.removeItem(DEVICE_INVENTORY_STORAGE_KEY)
+}
+const inventoryRecordForHost = (host, name = '') => {
+  return findDeviceInventoryRecord(deviceInventory, cleanText(host), cleanText(name), observedDeviceMacs.get(host))
+}
+const deviceSnForHost = (host, name = '') => inventoryRecordForHost(host, name)?.sn || ''
+const deviceMacForHost = (host, name = '') => observedDeviceMacs.get(host) || inventoryRecordForHost(host, name)?.mac || ''
+const rememberDeviceObservations = (observations) => {
+  observations.forEach((item) => {
+    if (!Object.hasOwn(item, 'mac')) return
+    const mac = observedMac(item.mac)
+    if (mac) observedDeviceMacs.set(item.host, mac)
+    else observedDeviceMacs.delete(item.host)
+  })
+  const result = persistDeviceObservations(localStorage, observations)
+  deviceInventory = result.inventory.map(normalizeDeviceInventoryRecord)
+  Object.keys(deviceNames).forEach((host) => { delete deviceNames[host] })
+  Object.assign(deviceNames, result.names)
+  result.invalidRuntimeHosts.forEach((host) => {
+    if (!observations.some((item) => item.host === host && observedMac(item.mac))) observedDeviceMacs.delete(host)
+    deviceRuntimeStates.delete(host)
+    deviceConnectionFailures.delete(host)
+    deviceDashboardStates.delete(host)
+    if (connectedHost === host) connectedHost = ''
+  })
+  scannedDevices = scannedDevices.map((device) => ({ ...device, name: deviceNames[device.host] || null }))
+  refreshDeviceGroupOptions()
+  updateClusterEntrySummary()
+}
+const savedDeviceGroupNames = () => [...new Set([
+  ...Object.values(deviceGroups),
+  ...deviceInventory.map((item) => item.group),
+].map(cleanText).filter(Boolean))]
   .sort((left, right) => left.localeCompare(right, 'zh-CN'))
 const saveDeviceGroups = () => {
   localStorage.setItem(DEVICE_GROUP_STORAGE_KEY, JSON.stringify(deviceGroups))
@@ -2048,6 +2136,9 @@ const saveDeviceGroups = () => {
 const deviceNameForHost = (host, name = null) => cleanText(name ?? scannedDevices.find((device) => device.host === host)?.name ?? deviceNames[host] ?? '')
 const deviceGroupForHost = (host, name = null) => {
   const resolvedName = deviceNameForHost(host, name)
+  const inventoryRecord = inventoryRecordForHost(host, resolvedName)
+  if (inventoryRecord) return inventoryRecord.group
+  if (resolvedName && deviceInventory.some((item) => item.name === resolvedName)) return ''
   return resolvedName ? deviceGroups[resolvedName] || '' : ''
 }
 const rememberDeviceStatusHost = (host, name) => {
@@ -2060,10 +2151,14 @@ const rememberDeviceStatusHost = (host, name) => {
     if (Array.isArray(parsed)) saved = parsed
   } catch { /* 用当前设备重新建立状态页清单 */ }
   const byHost = new Map(saved
-    .filter((item) => cleanText(item?.name) !== resolvedName || cleanText(item?.host) === resolvedHost)
     .map((item) => [cleanText(item?.host), item])
     .filter(([savedHost]) => savedHost))
-  byHost.set(resolvedHost, { host: resolvedHost, name: resolvedName })
+  byHost.set(resolvedHost, {
+    host: resolvedHost,
+    name: resolvedName,
+    sn: deviceSnForHost(resolvedHost, resolvedName),
+    mac: deviceMacForHost(resolvedHost, resolvedName),
+  })
   localStorage.setItem(DEVICE_STATUS_HOSTS_STORAGE_KEY, JSON.stringify([...byHost.values()]))
 }
 const forgetDeviceStatusHost = (host) => {
@@ -2096,7 +2191,7 @@ const refreshDeviceGroupOptions = () => {
   deviceGroupFilter.value = filterOptions.some((option) => option.value === selectedFilter) ? selectedFilter : 'all'
 
   const currentName = deviceNameForHost(currentHost())
-  const assignedGroup = currentName ? deviceGroups[currentName] || '' : ''
+  const assignedGroup = currentName ? deviceGroupForHost(currentHost(), currentName) : ''
   currentDeviceGroup.replaceChildren(
     new Option(currentName ? '未分组' : '请先读取设备名称', ''),
     ...groups.map((group) => new Option(group, group)),
@@ -2113,9 +2208,19 @@ const assignCurrentDeviceGroup = (groupName) => {
   const name = deviceNameForHost(host)
   if (!name) throw new Error('请先读取设备配置，获取设备名称后再分组')
   const group = cleanText(groupName)
-  if (group) deviceGroups[name] = group
-  else delete deviceGroups[name]
-  saveDeviceGroups()
+  const inventoryRecord = inventoryRecordForHost(host, name)
+  if (!inventoryRecord && deviceInventory.some((item) => item.name === name)) {
+    throw new Error('同名设备的 IP 已变化，无法确认对应 SN；请重新导出并导入设备信息')
+  }
+  if (inventoryRecord) {
+    inventoryRecord.group = group
+    inventoryRecord.lastIp = host
+    saveDeviceInventory()
+  } else {
+    if (group) deviceGroups[name] = group
+    else delete deviceGroups[name]
+    saveDeviceGroups()
+  }
   refreshDeviceGroupOptions()
   devicePage = 0
   devicePageRowCapacity = null
@@ -2189,12 +2294,13 @@ const openDeviceGroupCreator = (anchor) => {
 }
 const deviceLabel = (host, name) => {
   const resolvedName = name ?? deviceNames[host]
-  const group = resolvedName ? deviceGroups[resolvedName] : ''
-  return [host, resolvedName, group ? `分组：${group}` : ''].filter(Boolean).join(' · ')
+  const sn = deviceSnForHost(host, resolvedName)
+  const mac = deviceMacForHost(host, resolvedName)
+  const group = deviceGroupForHost(host, resolvedName)
+  return [host, resolvedName, sn ? `SN：${sn}` : '', mac ? `MAC：${mac}` : '', group ? `分组：${group}` : ''].filter(Boolean).join(' · ')
 }
-const cacheDeviceName = (host, name) => {
-  if (!name || deviceNames[host] === name) return
-  const previousName = cleanText(deviceNames[host])
+const cacheDeviceName = (host, name, mac) => {
+  if (!name) return
   let groupChanged = false
   try {
     const legacy = JSON.parse(localStorage.getItem(LEGACY_DEVICE_GROUP_STORAGE_KEY) || '{}')
@@ -2209,19 +2315,294 @@ const cacheDeviceName = (host, name) => {
       else localStorage.removeItem(LEGACY_DEVICE_GROUP_STORAGE_KEY)
     }
   } catch { /* 旧版分组损坏时不影响设备名称缓存 */ }
-  if (previousName && deviceGroups[previousName] && !deviceGroups[name]) {
-    deviceGroups[name] = deviceGroups[previousName]
-    const previousNameStillUsed = Object.entries(deviceNames)
-      .some(([savedHost, savedName]) => savedHost !== host && savedName === previousName)
-    if (!previousNameStillUsed) delete deviceGroups[previousName]
-    groupChanged = true
-  }
+  // 分组只跟随设备名称。IP 可能由 DHCP 重新分配给另一台灯，名称变化时不能继承该 IP
+  // 之前设备的分组；旧名称的分组也要保留，以便原设备换到新 IP 后恢复。
   if (groupChanged) saveDeviceGroups()
-  deviceNames[host] = name
+  rememberDeviceObservations([{ host, name, mac: mac ?? observedDeviceMacs.get(host) ?? '' }])
+}
+const collectDeviceInfoForExport = () => {
+  const byKey = new Map()
+  const add = (host, name, source = null) => {
+    const resolvedHost = cleanText(host)
+    const resolvedName = cleanText(name)
+    if (!resolvedName) return
+    const inventoryRecord = source || inventoryRecordForHost(resolvedHost, resolvedName)
+    const sn = cleanText(inventoryRecord?.sn)
+    const mac = normalizeMacAddress(inventoryRecord?.mac)
+    const lastIp = resolvedHost || cleanText(inventoryRecord?.lastIp)
+    const group = inventoryRecord
+      ? cleanText(inventoryRecord.group)
+      : deviceGroupForHost(lastIp, resolvedName)
+    const key = sn ? `sn:${sn}` : mac ? `mac:${mac}` : lastIp ? `ip:${lastIp}` : `name:${resolvedName}`
+    byKey.set(key, { sn, mac, name: resolvedName, group, lastIp })
+  }
+  deviceInventory.forEach((item) => add(item.lastIp, item.name, item))
+  Object.entries(deviceNames).forEach(([host, name]) => add(host, name))
+  scannedDevices.forEach((device) => add(device.host, deviceNameForHost(device.host, device.name)))
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEVICE_STATUS_HOSTS_STORAGE_KEY) || '[]')
+    if (Array.isArray(saved)) {
+      saved.forEach((item) => {
+        const host = cleanText(item?.host)
+        const name = cleanText(item?.name)
+        if (deviceNames[host] === name || inventoryRecordForHost(host, name)) add(host, name)
+      })
+    }
+  } catch { /* 其他设备来源仍可正常导出 */ }
+  return [...byKey.values()].sort((left, right) => (
+    left.name.localeCompare(right.name, 'zh-CN') || left.lastIp.localeCompare(right.lastIp)
+  ))
+}
+const exportDeviceInfo = () => {
+  const devices = collectDeviceInfoForExport()
+  if (!devices.length) {
+    showDeviceStatus('暂无可导出的设备，请先扫描并读取设备名称')
+    return
+  }
+  const payload = {
+    文件类型: 'ThaloConsole设备信息',
+    版本: 1,
+    说明: '请为每台设备填写唯一的SN编号和MAC地址；最近IP仅用于把设备信息与当前灯具对应，请勿删除。',
+    导出时间: new Date().toISOString(),
+    设备: devices.map((item) => ({
+      SN编号: item.sn,
+      MAC地址: item.mac,
+      设备名称: item.name,
+      设备分组: item.group,
+      最近IP: item.lastIp,
+    })),
+  }
+  downloadJsonFile(`thalo-device-info-${new Date().toISOString().slice(0, 10)}.json`, payload)
+  showDeviceStatus(`已导出 ${devices.length} 台设备信息，请填写 SN 编号和 MAC 地址后重新导入`)
+}
+const validateDeviceInfo = (imported) => {
+  if (!imported.length) throw new Error('设备信息文件中没有设备')
+  imported.forEach((item, index) => {
+    if (!item.name) throw new Error(`第 ${index + 1} 台设备缺少设备名称`)
+    if (!item.sn && !item.mac && !item.lastIp) throw new Error(`第 ${index + 1} 台设备至少需要 SN 编号、MAC 地址或最近 IP`)
+    if (item.mac && !/^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/.test(item.mac)) {
+      throw new Error(`第 ${index + 1} 台设备的 MAC 地址格式无效`)
+    }
+    if (item.lastIp && (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(item.lastIp)
+      || item.lastIp.split('.').some((part) => Number(part) > 255))) {
+      throw new Error(`第 ${index + 1} 台设备的最近 IP 格式无效`)
+    }
+  })
+  const duplicateSn = imported.find((item, index) => item.sn && imported.findIndex((other) => other.sn === item.sn) !== index)?.sn
+  if (duplicateSn) throw new Error(`SN 编号重复：${duplicateSn}`)
+  const duplicateMac = imported.find((item, index) => item.mac && imported.findIndex((other) => other.mac === item.mac) !== index)?.mac
+  if (duplicateMac) throw new Error(`MAC 地址重复：${duplicateMac}`)
+  const duplicateIp = imported.find((item, index) => item.lastIp && imported.findIndex((other) => other.lastIp === item.lastIp) !== index)?.lastIp
+  if (duplicateIp) throw new Error(`最近 IP 重复：${duplicateIp}`)
+}
+const applyDeviceInfo = (imported, previous = []) => {
+  previous.forEach((item) => {
+    deviceInventory = deviceInventory.filter((saved) => (
+      !(item.sn && saved.sn === item.sn)
+      && !(item.mac && saved.mac === item.mac)
+      && !(item.lastIp && saved.lastIp === item.lastIp)
+    ))
+    if (item.lastIp) {
+      delete deviceNames[item.lastIp]
+      forgetDeviceStatusHost(item.lastIp)
+    }
+  })
+  imported.forEach((item) => {
+    deviceInventory = deviceInventory.filter((saved) => (
+      !(item.sn && saved.sn === item.sn)
+      && !(item.mac && saved.mac === item.mac)
+      && !(item.lastIp && saved.lastIp === item.lastIp)
+    ))
+    deviceInventory.push(item)
+    if (item.lastIp) {
+      deviceNames[item.lastIp] = item.name
+      rememberDeviceStatusHost(item.lastIp, item.name)
+    }
+  })
+  saveDeviceInventory()
   localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(deviceNames))
-  rememberDeviceStatusHost(host, name)
+  scannedDevices = scannedDevices.map((device) => ({
+    ...device,
+    name: deviceNames[device.host] || (previous.some((item) => item.lastIp === device.host) ? null : device.name),
+  }))
+  refreshDeviceGroupOptions()
+  renderDeviceList()
+  updateCurrentDeviceSummary()
   updateClusterEntrySummary()
 }
+const importDeviceInfo = async (file) => {
+  const payload = JSON.parse(await file.text())
+  const source = Array.isArray(payload) ? payload : (payload?.设备 ?? payload?.devices)
+  if (!Array.isArray(source)) throw new Error('设备信息文件缺少“设备”数组')
+  const imported = source.map(normalizeDeviceInventoryRecord)
+  validateDeviceInfo(imported)
+  applyDeviceInfo(imported)
+  showDeviceStatus(`已导入 ${imported.length} 台设备信息，其中 ${imported.filter((item) => item.sn).length} 台已录入 SN，${imported.filter((item) => item.mac).length} 台已录入 MAC`)
+}
+let deviceInfoEditorOriginal = []
+let deviceInfoSortField = 'name'
+let deviceInfoSortDirection = 1
+const deviceInfoSortLabels = { name: '设备名称', group: '设备分组', sn: 'SN 编号', mac: 'MAC 地址', lastIp: '最近 IP' }
+const deviceInfoCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
+const compareDeviceInfoValues = (left, right) => {
+  const a = cleanText(left)
+  const b = cleanText(right)
+  // 空值在升序和降序下都排到末尾，便于先查看已填写的信息。
+  if (!a || !b) return a ? -1 : b ? 1 : 0
+  let comparison
+  if (deviceInfoSortField === 'lastIp') {
+    const ipNumber = (value) => {
+      if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) return null
+      const octets = value.split('.').map(Number)
+      return octets.some((part) => part > 255) ? null : octets.reduce((total, part) => total * 256 + part, 0)
+    }
+    const ipA = ipNumber(a)
+    const ipB = ipNumber(b)
+    comparison = ipA !== null && ipB !== null ? ipA - ipB : deviceInfoCollator.compare(a, b)
+  } else if (deviceInfoSortField === 'mac') {
+    comparison = a.replace(/[:-]/g, '').localeCompare(b.replace(/[:-]/g, ''), 'en', { sensitivity: 'base' })
+  } else {
+    comparison = deviceInfoCollator.compare(a, b)
+  }
+  return comparison * deviceInfoSortDirection
+}
+const sortDeviceInfoEditorRows = () => {
+  const container = document.getElementById('deviceInfoEditorRows')
+  const rows = [...container.querySelectorAll('.device-info-row')]
+  rows.sort((left, right) => compareDeviceInfoValues(
+    left.querySelector(`[data-field="${deviceInfoSortField}"]`).value,
+    right.querySelector(`[data-field="${deviceInfoSortField}"]`).value,
+  ))
+  // 移动整行保留五个输入框的未保存内容，不从缓存重新创建表单。
+  rows.forEach((row, index) => {
+    row.querySelector('legend').textContent = `设备 ${index + 1}`
+    container.append(row)
+  })
+  deviceInfoEditor.querySelectorAll('[data-device-info-sort]').forEach((button) => {
+    const field = button.dataset.deviceInfoSort
+    const selected = field === deviceInfoSortField
+    const direction = deviceInfoSortDirection === 1 ? '升序' : '降序'
+    button.textContent = `${deviceInfoSortLabels[field]} ${selected ? (deviceInfoSortDirection === 1 ? '↑' : '↓') : '↕'}`
+    button.setAttribute('aria-pressed', String(selected))
+    button.title = selected ? `当前${direction}，点击切换为${deviceInfoSortDirection === 1 ? '降序' : '升序'}` : `按${deviceInfoSortLabels[field]}升序排序`
+    button.disabled = !rows.length
+  })
+}
+const setDeviceInfoEditorStatus = (message, error = false) => {
+  const status = document.getElementById('deviceInfoEditorStatus')
+  status.textContent = message
+  status.classList.toggle('is-error', error)
+}
+const renderDeviceInfoEditor = () => {
+  deviceInfoEditorOriginal = collectDeviceInfoForExport().map((item) => ({ ...item }))
+  const rows = document.getElementById('deviceInfoEditorRows')
+  rows.replaceChildren()
+  document.getElementById('btnSaveDeviceInfo').disabled = !deviceInfoEditorOriginal.length
+  if (!deviceInfoEditorOriginal.length) {
+    const empty = document.createElement('p')
+    empty.className = 'device-info-empty'
+    empty.textContent = '暂无设备信息，请先扫描并读取设备名称，或导入设备信息文件。'
+    rows.append(empty)
+    sortDeviceInfoEditorRows()
+    return
+  }
+  deviceInfoEditorOriginal.forEach((item, index) => {
+    const row = document.createElement('fieldset')
+    row.className = 'device-info-row'
+    const legend = document.createElement('legend')
+    legend.textContent = `设备 ${index + 1}`
+    row.append(legend)
+    const fields = document.createElement('div')
+    fields.className = 'device-info-fields'
+    for (const [key, title, placeholder] of [
+      ['name', '设备名称 *', '请输入设备名称'],
+      ['group', '设备分组', '未分组'],
+      ['sn', 'SN 编号', '请输入 SN 编号'],
+      ['mac', 'MAC 地址', '例如 AA:BB:CC:DD:EE:FF'],
+      ['lastIp', '最近 IP', '例如 192.168.1.100'],
+    ]) {
+      const label = document.createElement('label')
+      label.className = 'sun-item'
+      const caption = document.createElement('span')
+      caption.textContent = title
+      const input = document.createElement('input')
+      input.className = 'sun-input'
+      input.type = 'text'
+      input.dataset.field = key
+      input.value = item[key]
+      input.placeholder = placeholder
+      input.required = key === 'name'
+      if (key === 'lastIp') input.inputMode = 'decimal'
+      label.append(caption, input)
+      fields.append(label)
+    }
+    row.append(fields)
+    rows.append(row)
+  })
+  sortDeviceInfoEditorRows()
+}
+deviceInfoEditor.querySelectorAll('[data-device-info-sort]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const field = button.dataset.deviceInfoSort
+    deviceInfoSortDirection = deviceInfoSortField === field ? -deviceInfoSortDirection : 1
+    deviceInfoSortField = field
+    sortDeviceInfoEditorRows()
+    setDeviceInfoEditorStatus(`已按${deviceInfoSortLabels[field]}${deviceInfoSortDirection === 1 ? '升序' : '降序'}排序`)
+  })
+})
+const saveDeviceInfoEdits = () => {
+  const records = [...document.querySelectorAll('.device-info-row')].map((row) => (
+    normalizeDeviceInventoryRecord(Object.fromEntries([...row.querySelectorAll('input')]
+      .map((input) => [input.dataset.field, input.value])))
+  ))
+  validateDeviceInfo(records)
+  applyDeviceInfo(records, deviceInfoEditorOriginal)
+  renderDeviceInfoEditor()
+  const message = `已保存 ${records.length} 台设备信息`
+  setDeviceInfoEditorStatus(message)
+  showDeviceStatus(message)
+}
+document.getElementById('btnEditDeviceInfo').onclick = () => {
+  renderDeviceInfoEditor()
+  setDeviceInfoEditorStatus(`共 ${deviceInfoEditorOriginal.length} 台设备；关闭面板将放弃未保存的修改`)
+  deviceInfoEditor.showModal()
+}
+document.getElementById('btnCloseDeviceInfoEditor').onclick = () => deviceInfoEditor.close()
+deviceInfoEditor.addEventListener('click', (event) => {
+  if (event.target === deviceInfoEditor) {
+    const bounds = deviceInfoEditor.getBoundingClientRect()
+    if (event.clientX < bounds.left || event.clientX > bounds.right
+      || event.clientY < bounds.top || event.clientY > bounds.bottom) deviceInfoEditor.close()
+  }
+})
+document.getElementById('deviceInfoEditorForm').addEventListener('submit', (event) => {
+  event.preventDefault()
+  try { saveDeviceInfoEdits() } catch (error) { setDeviceInfoEditorStatus(error.message, true) }
+})
+document.getElementById('btnExportDeviceInfo').onclick = () => {
+  try {
+    if (deviceInfoEditorOriginal.length) saveDeviceInfoEdits()
+    exportDeviceInfo()
+    setDeviceInfoEditorStatus(deviceStatus.textContent)
+  } catch (error) { setDeviceInfoEditorStatus(`导出设备信息失败：${error.message}`, true) }
+}
+document.getElementById('deviceInfoImportLabel').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    document.getElementById('deviceInfoFile').click()
+  }
+})
+document.getElementById('deviceInfoFile').addEventListener('change', async (event) => {
+  const input = event.currentTarget
+  const file = input.files[0]
+  if (!file) return
+  try {
+    await importDeviceInfo(file)
+    renderDeviceInfoEditor()
+    setDeviceInfoEditorStatus(deviceStatus.textContent)
+  } catch (error) { setDeviceInfoEditorStatus(`导入设备信息失败：${error.message}`, true) }
+  finally { input.value = '' }
+})
 const recordDeviceConnectionFailure = (host) => {
   const failureCount = (deviceConnectionFailures.get(host) || 0) + 1
   if (failureCount < 2) {
@@ -2361,7 +2742,12 @@ const stopDeviceDemoMode = (host) => {
 }
 const updateCurrentDeviceSummary = (state = undefined) => {
   const host = currentHost()
-  currentDeviceName.textContent = currentDeviceCachedName() || '—'
+  const cachedName = currentDeviceCachedName()
+  const sn = deviceSnForHost(host, cachedName)
+  const mac = deviceMacForHost(host, cachedName)
+  currentDeviceName.textContent = cachedName
+    ? [cachedName, sn ? `SN ${sn}` : '', mac ? `MAC ${mac}` : ''].filter(Boolean).join(' · ')
+    : '—'
   const resolvedState = state ?? (host && host === connectedHost ? 'connected' : 'idle')
   const labels = { idle: '未连接', connecting: '连接中', connected: '已连接', failed: '连接失败' }
   currentConnectionState.dataset.state = resolvedState
@@ -2393,6 +2779,10 @@ const api = async (path, payload = undefined) => {
 const showDeviceStatus = (value) => {
   deviceStatus.textContent = value
 }
+const deviceMacResultMessage = (result) => {
+  if (!Object.hasOwn(result, 'mac')) return '中间件版本较旧，不支持 MAC 读取；请重启本地中间件后刷新页面'
+  return result.mac ? `MAC ${result.mac}` : `MAC 未能读取：${result.macError || '系统邻居表中没有该设备记录'}`
+}
 const currentHost = () => deviceHost.value.trim()
 const sendDevice = async (command, label) => {
   showDeviceStatus(`${label}：正在连接 ${currentHost()}…`)
@@ -2406,10 +2796,11 @@ const sendDevice = async (command, label) => {
       throw new Error('设备未返回数据，不能判定为已连接')
     }
     deviceConnectionFailures.delete(host)
+    rememberDeviceObservations([{ host, mac: result.mac || '' }])
     connectedHost = host
     updateCurrentDeviceSummary('connected')
     addPacketLog('←', host, result.response)
-    showDeviceStatus(`${label}完成，收到 ${result.response}`)
+    showDeviceStatus(`${label}完成，收到 ${result.response}；${deviceMacResultMessage(result)}`)
     return result
   } catch (error) {
     const removedName = recordDeviceConnectionFailure(host)
@@ -2549,7 +2940,9 @@ const renderDeviceDashboard = () => {
     const name = document.createElement('strong')
     name.textContent = state.name || deviceNameForHost(state.host) || '未命名设备'
     const ip = document.createElement('span')
-    ip.textContent = state.host
+    const sn = deviceSnForHost(state.host, state.name)
+    const mac = deviceMacForHost(state.host, state.name)
+    ip.textContent = [state.host, sn ? `SN ${sn}` : '', mac ? `MAC ${mac}` : ''].filter(Boolean).join(' · ')
     identity.append(name, ip)
     const badge = document.createElement('span')
     badge.className = 'device-status-badge'
@@ -2609,7 +3002,8 @@ const refreshDashboardDevice = async (host) => {
     deviceConnectionFailures.delete(host)
     try {
       const parsed = parseDashboardDevicePacket(host, result.response)
-      if (parsed.name && parsed.name !== host) cacheDeviceName(host, parsed.name)
+      rememberDeviceObservations([{ host, mac: result.mac || '' }])
+      if (parsed.name && parsed.name !== host) cacheDeviceName(host, parsed.name, result.mac)
       deviceDashboardStates.set(host, {
         host,
         ...parsed,
@@ -2787,6 +3181,12 @@ function scheduleDeviceListRender(recalculateCapacity = false) {
 function renderDeviceList() {
   deviceButtons.clear()
   const allDevices = [...scannedDevices].sort((a, b) => {
+    // 扫描结果均已通过 TCP 8266 探测；实际读到 MAC 的设备先显示，
+    // 不使用手工填写的档案 MAC，保证未缓存名称的新设备也能排到前面。
+    const aHasMac = Boolean(observedMac(a.mac) || observedDeviceMacs.get(a.host))
+    const bHasMac = Boolean(observedMac(b.mac) || observedDeviceMacs.get(b.host))
+    const macPriority = Number(bHasMac) - Number(aHasMac)
+    if (macPriority) return macPriority
     const aNamed = Boolean(a.name ?? deviceNames[a.host])
     const bNamed = Boolean(b.name ?? deviceNames[b.host])
     return Number(bNamed) - Number(aNamed)
@@ -2817,15 +3217,17 @@ function renderDeviceList() {
     const button = document.createElement('button')
     const name = device.name ?? deviceNames[device.host]
     const group = deviceGroupForHost(device.host, name)
+    const sn = deviceSnForHost(device.host, name)
+    const mac = deviceMacForHost(device.host, name)
     const ip = document.createElement('span')
     ip.className = 'device-ip'
     ip.dataset.fullIp = device.host
     ip.textContent = device.host
-    button.title = deviceLabel(device.host, name)
+    button.title = [deviceLabel(device.host, name), device.macError ? `MAC 读取：${device.macError}` : ''].filter(Boolean).join('\n')
     if (name) {
       const deviceName = document.createElement('span')
       deviceName.className = 'device-name'
-      deviceName.textContent = group ? `${name} · ${group}` : name
+      deviceName.textContent = [name, sn ? `SN ${sn}` : '', mac ? `MAC ${mac}` : '', group].filter(Boolean).join(' · ')
       button.classList.add('known-device')
       button.append(ip, deviceName)
     } else {
@@ -2887,29 +3289,38 @@ let clusterResults = new Map()
 let clusterDisplayTargets = null
 
 const clusterNamedDevices = () => {
-  const byName = new Map()
-  Object.entries(deviceNames).forEach(([host, name]) => {
+  const byHost = new Map()
+  const add = (host, name) => {
     const resolvedHost = cleanText(host)
     const resolvedName = cleanText(name)
-    if (resolvedHost && resolvedName) byName.set(resolvedName, { host: resolvedHost, name: resolvedName })
+    if (resolvedHost && resolvedName) byHost.set(resolvedHost, { host: resolvedHost, name: resolvedName })
+  }
+  Object.entries(deviceNames).forEach(([host, name]) => {
+    add(host, name)
   })
+  deviceInventory.forEach((device) => add(device.lastIp, device.name))
   try {
     const saved = JSON.parse(localStorage.getItem(DEVICE_STATUS_HOSTS_STORAGE_KEY) || '[]')
     if (Array.isArray(saved)) {
       saved.forEach((device) => {
         const host = cleanText(device?.host)
         const name = cleanText(device?.name)
-        if (host && name && deviceNames[host] === name) byName.set(name, { host, name })
+        if (host && name && deviceNames[host] === name) add(host, name)
       })
     }
   } catch { /* 名称缓存仍可作为集群目标 */ }
   scannedDevices.forEach((device) => {
     const host = cleanText(device.host)
     const name = deviceNameForHost(host, device.name)
-    if (host && name) byName.set(name, { host, name })
+    add(host, name)
   })
-  return [...byName.values()]
-    .map((device) => ({ ...device, group: cleanText(deviceGroups[device.name]) }))
+  return [...byHost.values()]
+    .map((device) => ({
+      ...device,
+      sn: deviceSnForHost(device.host, device.name),
+      mac: deviceMacForHost(device.host, device.name),
+      group: deviceGroupForHost(device.host, device.name),
+    }))
     .sort((left, right) => (
       left.group.localeCompare(right.group, 'zh-CN')
       || left.name.localeCompare(right.name, 'zh-CN')
@@ -2977,7 +3388,12 @@ const renderClusterTargets = () => {
     const name = document.createElement('strong')
     name.textContent = device.name
     const detail = document.createElement('span')
-    detail.textContent = [device.host, device.group || '未分组'].join(' · ')
+    detail.textContent = [
+      device.host,
+      device.sn ? `SN ${device.sn}` : '',
+      device.mac ? `MAC ${device.mac}` : '',
+      device.group || '未分组',
+    ].filter(Boolean).join(' · ')
     identity.append(name, detail)
     const stateBox = document.createElement('div')
     stateBox.className = 'cluster-target-state'
@@ -3059,7 +3475,8 @@ const sendClusterConfiguration = async () => {
         const result = await api('/api/send', { host: device.host, command, timeout: 1800 })
         if (!cleanText(result.response)) throw new Error('设备未返回数据')
         deviceConnectionFailures.delete(device.host)
-        rememberDeviceStatusHost(device.host, device.name)
+        rememberDeviceObservations([{ host: device.host, mac: result.mac || '' }])
+        rememberDeviceStatusHost(device.host, deviceNames[device.host] || (result.mac ? '' : device.name))
         addPacketLog('←', device.host, result.response)
         clusterResults.set(device.host, { status: 'success', message: `收到 ${result.response}` })
         succeeded += 1
@@ -3118,11 +3535,11 @@ const readDeviceConfiguration = async () => {
   const name = readDeviceName(result.response)
   const mode = readDeviceMode(result.response)
   if (name) {
-    cacheDeviceName(host, name)
+    cacheDeviceName(host, name, result.mac)
     updateDeviceButton(host, name)
   }
   if (mode) setDeviceMode(host, mode)
-  showDeviceStatus(`已读取并导入灯具配置${name ? `：${name}` : ''}`)
+  showDeviceStatus(`已读取并导入灯具配置${name ? `：${name}` : ''}；${deviceMacResultMessage(result)}`)
 }
 document.getElementById('btnDeviceScan').onclick = async () => {
   setRightToolsDrawer(false)
@@ -3130,21 +3547,36 @@ document.getElementById('btnDeviceScan').onclick = async () => {
     showDeviceStatus('正在扫描当前网段的 TCP 8266 设备（与 App 相同，约需数秒）…')
     const result = await api('/api/scan', { subnet: deviceSubnet.value.trim() || undefined })
     deviceSubnet.value = result.subnet
-    scannedDevices = result.devices
+    rememberDeviceObservations(result.devices)
+    scannedDevices = result.devices.map((device) => ({ ...device, name: deviceNames[device.host] || null }))
     devicePage = 0
     deviceLogForcedBySpace = false
-    showDeviceStatus(result.devices.length ? `发现 ${result.devices.length} 台可连接灯具` : '未发现 TCP 8266 灯具')
+    const macCount = result.devices.filter((device) => device.mac).length
+    const oldBridge = result.devices.some((device) => !Object.hasOwn(device, 'mac'))
+    showDeviceStatus(result.devices.length ? `发现 ${result.devices.length} 台可连接灯具${oldBridge
+      ? '；中间件版本较旧，不支持 MAC 读取，请重启本地中间件后刷新页面'
+      : `，已读取 ${macCount} 台 MAC${macCount < result.devices.length ? '；其余设备 MAC 暂不可用' : ''}`}` : '未发现 TCP 8266 灯具')
     renderDeviceList()
   } catch (error) { showDeviceStatus(`扫描失败：${error.message}`) }
 }
 document.getElementById('btnClearDeviceCache').onclick = () => {
-  const cachedCount = Object.keys(deviceNames).length
+  const cachedCount = new Set([
+    ...Object.keys(deviceNames),
+    ...deviceInventory.map((item) => item.lastIp).filter(Boolean),
+  ]).size
   Object.keys(deviceNames).forEach((host) => delete deviceNames[host])
+  deviceInventory = []
+  observedDeviceMacs.clear()
   localStorage.removeItem(DEVICE_NAME_STORAGE_KEY)
+  localStorage.removeItem(DEVICE_INVENTORY_STORAGE_KEY)
   scannedDevices = scannedDevices.map((device) => ({ ...device, name: null }))
   devicePage = 0
   deviceLogForcedBySpace = false
   showDeviceStatus(cachedCount ? `已清理 ${cachedCount} 台灯具的名称缓存` : '当前没有缓存设备')
+  localStorage.removeItem(DEVICE_STATUS_HOSTS_STORAGE_KEY)
+  refreshDeviceGroupOptions()
+  renderDeviceInfoEditor()
+  setDeviceInfoEditorStatus(deviceStatus.textContent)
   updateClusterEntrySummary()
   renderDeviceList()
   updateCurrentDeviceSummary()
@@ -3215,9 +3647,37 @@ document.getElementById('btnClearDeviceLog').onclick = () => {
 }
 api('/api/health').then((info) => {
   if (info.subnet) deviceSubnet.value = info.subnet
-  showDeviceStatus(`本地桥接已就绪；默认扫描 ${info.subnet || '手动指定网段'}.0/24`)
+  showDeviceStatus(info.capabilities?.readDeviceMac
+    ? `本地桥接已就绪，支持 MAC 读取；默认扫描 ${info.subnet || '手动指定网段'}.0/24`
+    : '本地中间件版本较旧，不支持 MAC 读取；请重启本地中间件后刷新页面')
 }).catch(() => showDeviceStatus('未检测到本地桥接。请使用 npm run console 启动。'))
 setInterval(updateDeviceRuntimeSummary, 1000)
+window.addEventListener('storage', (event) => {
+  if (![DEVICE_NAME_STORAGE_KEY, DEVICE_INVENTORY_STORAGE_KEY, DEVICE_STATUS_HOSTS_STORAGE_KEY].includes(event.key)) return
+  try {
+    const savedNames = JSON.parse(localStorage.getItem(DEVICE_NAME_STORAGE_KEY) || '{}')
+    const savedInventory = JSON.parse(localStorage.getItem(DEVICE_INVENTORY_STORAGE_KEY) || '[]')
+    if (!savedNames || typeof savedNames !== 'object' || Array.isArray(savedNames) || !Array.isArray(savedInventory)) return
+    deviceInventory.forEach((record) => {
+      if (!record.lastIp || !record.mac) return
+      const replacement = savedInventory.find((item) => item.lastIp === record.lastIp)
+      if (observedMac(replacement?.mac) === observedMac(record.mac)) return
+      deviceRuntimeStates.delete(record.lastIp)
+      deviceDashboardStates.delete(record.lastIp)
+      deviceConnectionFailures.delete(record.lastIp)
+      if (connectedHost === record.lastIp) connectedHost = ''
+    })
+    observedDeviceMacs.clear()
+    Object.keys(deviceNames).forEach((host) => { delete deviceNames[host] })
+    Object.assign(deviceNames, savedNames)
+    deviceInventory = savedInventory.map(normalizeDeviceInventoryRecord)
+    scannedDevices = scannedDevices.map((device) => ({ ...device, name: deviceNames[device.host] || null }))
+    refreshDeviceGroupOptions()
+    renderDeviceList()
+    updateCurrentDeviceSummary()
+    updateClusterEntrySummary()
+  } catch { /* 外部页面缓存损坏时保留当前控制台数据 */ }
+})
 
 function readDeviceName(packet) {
   try {

@@ -13,6 +13,22 @@ npm run console
 
 > 中间件仅允许访问私有 IPv4 地址，并且仅探测/连接灯具的 TCP `8266` 端口。
 
+### MAC 读取与 IP 变更
+
+中间件在扫描完成及设备通信成功后，通过本机系统邻居表查询对应 IP 的 MAC。Windows 使用 `arp.exe -a`，Linux 使用 `ip -j -4 neigh show`（不可用时读取 `/proc/net/arp`），macOS 使用 `arp -an`。这一步不发送额外灯具控制指令，也不改变原有回包。
+
+- `POST /api/device-mac`，请求体 `{ "host": "192.168.0.100" }`：探测 TCP 8266 并返回 `host`、`reachable`、`mac`、`macSource`、`macError`。
+- `POST /api/scan`：每台设备增加 `mac`、`macSource`、`macError`。
+- `POST /api/send`：在原有 `host`、`command`、`response` 之外增加上述 MAC 字段；MAC 读取失败不会使已成功的灯具通信失败。
+
+MAC 统一为大写冒号格式，例如 `34:5F:45:5F:6C:47`。只查询目标 IP 的邻居记录，不以网关地址或设备名称代替 MAC。无记录、系统查询失败或多个网卡返回冲突值时，`mac` 为空并在 `macError` 中说明原因。多个在线 IP 对应相同 MAC 时，扫描结果也不会自动绑定。
+
+控制台及设备状态页优先按实际读取的 MAC 关联档案，保留 SN 和分组并更新最近 IP，支持同名设备变更或互换 IP。另一台设备占用旧 IP 时，原档案的 SN 和分组不会转给它；原档案仍保留，最近 IP 暂时置空。已绑定 MAC 的档案不会再仅凭同名跨 IP 自动迁移。首次为没有 MAC 的旧档案补 MAC 时，只关联原 IP 且没有名称冲突的档案。
+
+此方式依赖本机可见的局域网邻居记录；跨路由网段、无线隔离或代理 ARP 环境可能无法取得设备自身 MAC。MAC 不可用时，原有扫描和配置读取仍可使用。SN 仍由用户维护。修改中间件后需重启 `npm run console`。
+
+邻居表机制参考 [Microsoft Get-NetNeighbor 文档](https://learn.microsoft.com/en-us/powershell/module/nettcpip/get-netneighbor)。
+
 ### Noo-Psyche Coral Light Visualizer
 
 面向 Noo-Psyche 海水珊瑚灯的开源配置编辑器。使用浏览器即可编排 24 小时六通道照明曲线、预览光谱变化，并在二维码、原始串与设备报文之间完成配置导入和导出。

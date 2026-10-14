@@ -1,7 +1,9 @@
 import './device-status.css'
+import { findDeviceInventoryRecord, observedMac, persistDeviceObservations } from './device-identity.js'
 
 const DEVICE_NAME_STORAGE_KEY = 'thalo-console-device-names-v1'
 const DEVICE_GROUP_STORAGE_KEY = 'thalo-console-device-groups-by-name-v2'
+const DEVICE_INVENTORY_STORAGE_KEY = 'thalo-console-device-inventory-v1'
 const DEVICE_STATUS_HOSTS_STORAGE_KEY = 'thalo-console-status-hosts-v1'
 const DEVICE_RUNTIME_STORAGE_KEY = 'thalo-console-device-runtime-v1'
 const READ_COMMAND = 'AAA51008BB'
@@ -45,6 +47,7 @@ let renderFrame = 0
 let autoRefreshTimer = null
 const states = new Map()
 const failureCounts = new Map()
+const observedDeviceMacs = new Map()
 
 const cleanText = (value) => String(value || '').replace(/\s+/g, '').trim()
 const readObjectStorage = (key) => {
@@ -56,6 +59,33 @@ const readObjectStorage = (key) => {
 const deviceNames = () => readObjectStorage(DEVICE_NAME_STORAGE_KEY)
 const deviceGroups = () => readObjectStorage(DEVICE_GROUP_STORAGE_KEY)
 const runtimeStates = () => readObjectStorage(DEVICE_RUNTIME_STORAGE_KEY)
+const rememberDeviceObservation = (observation) => {
+  const mac = observedMac(observation.mac)
+  if (mac) observedDeviceMacs.set(observation.host, mac)
+  else observedDeviceMacs.delete(observation.host)
+  const result = persistDeviceObservations(localStorage, [observation])
+  result.invalidRuntimeHosts.forEach((host) => {
+    if (host !== observation.host || !mac) observedDeviceMacs.delete(host)
+  })
+}
+const deviceInventory = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(DEVICE_INVENTORY_STORAGE_KEY) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch { return [] }
+}
+const inventoryRecordForHost = (host, name = '') => {
+  return findDeviceInventoryRecord(deviceInventory(), cleanText(host), cleanText(name), observedDeviceMacs.get(host))
+}
+const deviceIdentity = (host, name, legacyGroups = deviceGroups()) => {
+  const record = inventoryRecordForHost(host, name)
+  const hasInventoryName = deviceInventory().some((item) => cleanText(item?.name) === cleanText(name))
+  return {
+    sn: cleanText(record?.sn),
+    mac: observedDeviceMacs.get(host) || cleanText(record?.mac),
+    group: record ? cleanText(record.group) : hasInventoryName ? '' : cleanText(legacyGroups[name]),
+  }
+}
 
 function normalizeHexStream(value) {
   const clean = cleanText(value).toLowerCase()
@@ -175,10 +205,12 @@ function loadDevices() {
   stored.forEach((item) => {
     const host = cleanText(typeof item === 'string' ? item : item?.host)
     const name = cleanText(typeof item === 'object' ? item?.name : '') || cleanText(names[host])
-    if (host && name) byHost.set(host, { host, name, group: groups[name] || '' })
+    if (host && name) byHost.set(host, { host, name, ...deviceIdentity(host, name, groups) })
   })
   Object.entries(names).forEach(([host, name]) => {
-    if (cleanText(host) && cleanText(name) && !byHost.has(host)) byHost.set(host, { host, name, group: groups[name] || '' })
+    if (cleanText(host) && cleanText(name) && !byHost.has(host)) {
+      byHost.set(host, { host, name, ...deviceIdentity(host, name, groups) })
+    }
   })
   devices = [...byHost.values()].sort((left, right) => (
     left.group.localeCompare(right.group, 'zh-CN') || left.name.localeCompare(right.name, 'zh-CN') || left.host.localeCompare(right.host)
@@ -250,7 +282,11 @@ function buildCard(device) {
   const name = document.createElement('strong')
   name.textContent = state.name || device.name
   const host = document.createElement('span')
-  host.textContent = device.host
+  host.textContent = [
+    device.host,
+    state.sn ? `SN ${state.sn}` : '',
+    state.mac ? `MAC ${state.mac}` : '',
+  ].filter(Boolean).join(' · ')
   identity.append(name, host)
   const badge = document.createElement('span')
   badge.className = 'status-badge'
@@ -336,7 +372,9 @@ async function requestDevice(host) {
   const data = await response.json()
   if (!response.ok) throw new Error(data.error || '本地桥接请求失败')
   if (!cleanText(data.response)) throw new Error('设备未返回数据')
-  return data.response
+  if (!Object.hasOwn(data, 'mac')) data.macError = '中间件版本较旧，不支持 MAC 读取；请重启本地中间件后刷新页面'
+  rememberDeviceObservation({ host, mac: data.mac })
+  return data
 }
 
 function removeCachedNameAfterFailure(host) {
@@ -368,29 +406,30 @@ async function refreshOne(device) {
   states.set(device.host, { ...previous, status: 'connecting', error: '' })
   render()
   try {
-    const response = await requestDevice(device.host)
+    const result = await requestDevice(device.host)
+    const response = result.response
     failureCounts.delete(device.host)
     try {
       const parsed = parseDeviceResponse(device.host, response)
-      const resolvedName = parsed.name || previous.name || device.name
+      const resolvedName = parsed.name || deviceNames()[device.host] || (result.mac ? '未命名设备' : previous.name || device.name)
       if (parsed.name) {
-        const names = deviceNames()
-        names[device.host] = parsed.name
-        localStorage.setItem(DEVICE_NAME_STORAGE_KEY, JSON.stringify(names))
+        rememberDeviceObservation({ host: device.host, name: parsed.name, mac: result.mac })
       }
-      const group = deviceGroups()[resolvedName] || ''
+      const identity = deviceIdentity(device.host, resolvedName)
       states.set(device.host, {
         ...previous,
         ...parsed,
         name: resolvedName,
-        group,
+        ...identity,
         status: 'connected',
         updatedAt: timestamp(),
-        error: '',
+        error: result.macError || '',
       })
     } catch (error) {
       states.set(device.host, {
         ...previous,
+        name: deviceNames()[device.host] || (result.mac ? '未命名设备' : previous.name),
+        ...deviceIdentity(device.host, deviceNames()[device.host] || ''),
         status: 'warning',
         updatedAt: timestamp(),
         error: `已收到回包，但配置解析失败：${error.message}`,
@@ -418,6 +457,8 @@ async function refreshAll() {
   }))
   refreshRunning = false
   refreshButton.disabled = false
+  loadDevices()
+  render()
 }
 
 function initialize() {
@@ -431,7 +472,7 @@ function initialize() {
 refreshButton.onclick = refreshAll
 window.addEventListener('resize', render)
 window.addEventListener('storage', (event) => {
-  if ([DEVICE_NAME_STORAGE_KEY, DEVICE_GROUP_STORAGE_KEY, DEVICE_STATUS_HOSTS_STORAGE_KEY, DEVICE_RUNTIME_STORAGE_KEY].includes(event.key)) {
+  if ([DEVICE_NAME_STORAGE_KEY, DEVICE_GROUP_STORAGE_KEY, DEVICE_INVENTORY_STORAGE_KEY, DEVICE_STATUS_HOSTS_STORAGE_KEY, DEVICE_RUNTIME_STORAGE_KEY].includes(event.key)) {
     const firstVisibleHost = devices[page * pageSize]?.host
     loadDevices()
     const firstIndex = Math.max(0, devices.findIndex((device) => device.host === firstVisibleHost))

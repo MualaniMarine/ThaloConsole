@@ -2,6 +2,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import { createServer as createViteServer } from 'vite'
+import { currentNeighborTable, macInfoForHost } from './server/device-mac.mjs'
 
 const PORT = Number(process.env.PORT || 5173)
 const DEVICE_PORT = 8266
@@ -19,6 +20,7 @@ async function body(req) {
 }
 
 function privateIpv4(value) {
+  if (!net.isIPv4(String(value))) return false
   const parts = String(value).split('.').map(Number)
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
   return parts[0] === 10 || parts[0] === 127 || (parts[0] === 192 && parts[1] === 168) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
@@ -104,16 +106,36 @@ function exchange(host, hex, timeout = 1400) {
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' })
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === '/api/health') return json(res, 200, { ok: true, port: DEVICE_PORT, subnet: localSubnet() })
+    if (req.url === '/api/health') return json(res, 200, { ok: true, port: DEVICE_PORT, subnet: localSubnet(), capabilities: { readDeviceMac: true } })
     if (req.url === '/api/scan' && req.method === 'POST') {
       const { subnet = localSubnet() } = await body(req)
       if (!subnet) throw new Error('未找到私有 IPv4 网卡，请手动输入网段')
-      return json(res, 200, { subnet, devices: (await scan(subnet)).map((host) => ({ host, name: null })) })
+      const hosts = await scan(subnet)
+      const neighbors = await currentNeighborTable()
+      const devices = hosts.map((host) => ({ host, name: null, ...macInfoForHost(neighbors, host) }))
+      // 同一 MAC 对应多个在线 IP 时不猜测迁移方向，例如代理 ARP 或多地址设备。
+      devices.forEach((device) => {
+        if (device.mac && devices.some((other) => other !== device && other.mac === device.mac)) {
+          device.macError = '多个在线 IP 返回相同 MAC，无法确认唯一设备身份'
+        }
+      })
+      devices.forEach((device) => { if (device.macError) { device.mac = ''; device.macSource = '' } })
+      return json(res, 200, { subnet, devices })
+    }
+    if (req.url === '/api/device-mac' && req.method === 'POST') {
+      const { host } = await body(req)
+      if (!privateIpv4(host)) throw new Error('目标必须为私有 IPv4 地址')
+      // TCP 探测使系统建立邻居记录，不发送任何灯具控制指令。
+      const reachable = await probe(host, 500)
+      const identity = reachable ? macInfoForHost(await currentNeighborTable(), host)
+        : { mac: '', macSource: '', macError: '设备 TCP 8266 不可达，无法确认当前 MAC' }
+      return json(res, 200, { host, reachable, ...identity })
     }
     if (req.url === '/api/send' && req.method === 'POST') {
       const { host, command, timeout } = await body(req)
       const response = await exchange(host, String(command || ''), Number(timeout) || 1400)
-      return json(res, 200, { host, command: String(command).toUpperCase(), response })
+      const identity = macInfoForHost(await currentNeighborTable(), host)
+      return json(res, 200, { host, command: String(command).toUpperCase(), response, ...identity })
     }
     vite.middlewares(req, res, () => json(res, 404, { error: 'Not found' }))
   } catch (error) {
